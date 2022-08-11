@@ -14,7 +14,7 @@ class Scanner(val source: String) {
     private val ALPHANUM = listOf(DIGITS, ALPHA).flatten()
 
     fun scanTokens(): List<Token> {
-        while (!isAtEnd()) {
+        while (!isAtEnd) {
             start = current
             scanToken()
         }
@@ -40,7 +40,7 @@ class Scanner(val source: String) {
             '>' -> addToken(if (match('=')) GREATER_EQUAL else GREATER)
             '/' -> {
                 if (match('/')) {
-                    while (curChar != '\n' && !isAtEnd()) advance()
+                    while (curChar != '\n' && !isAtEnd) advance()
                 } else {
                     addToken(SLASH)
                 }
@@ -93,12 +93,12 @@ class Scanner(val source: String) {
     }
 
     private fun string() {
-        while (curChar != '"' && !isAtEnd()) {
+        while (curChar != '"' && !isAtEnd) {
             if (curChar == '\n') line++
             advance()
         }
 
-        if (isAtEnd()) {
+        if (isAtEnd) {
             Lox.error(line, "Unterminated string.")
             return
         }
@@ -109,7 +109,7 @@ class Scanner(val source: String) {
         addToken(STRING, literal)
     }
 
-    private fun isAtEnd() = current >= source.length
+    private val isAtEnd get() = current >= source.length
 
     private fun advance() = source[current++]
 
@@ -118,11 +118,12 @@ class Scanner(val source: String) {
         tokens.add(Token(type, lexeme, line, literal))
     }
 
-    private fun match(expected: Char): Boolean {
-        if (isAtEnd()) return false
-        if (curChar != expected) return false
-
-        current++
-        return true
+    private fun match(expected: Char) = when {
+        isAtEnd -> false
+        curChar != expected -> false
+        else -> {
+            current++
+            true
+        }
     }
 }

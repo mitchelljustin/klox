@@ -1,19 +1,18 @@
 import TokenType.*
 
-
 class Parser(private val tokens: List<Token>) {
-    class ParserError(private val token: Token, override val message: String) : Error(message) {
+    class ParseError(
+        private val token: Token,
+        override val message: String? = null,
+    ) : kotlin.Exception(message) {
         override fun toString() = "[Line ${token.line}] $message ($token)"
     }
 
     private var current = 0
 
     private val curToken get() = tokens[current]
-    private val prevToken get() = tokens[current - 1]
     private val isAtEnd get() = curToken.type == EOF
-
-    //    val nextToken get() = tokens.getOrNull(current + 1)
-
+    private val prevToken get() = tokens[current - 1]
 
     private fun match(vararg types: TokenType): Boolean {
         for (type in types) {
@@ -32,14 +31,27 @@ class Parser(private val tokens: List<Token>) {
         return prevToken
     }
 
-    private fun error(message: String): ParserError {
-        Lox.report(curToken.line, "at '${curToken.lexeme}'", message)
-        return ParserError(curToken, message)
+    private fun error(message: String): ParseError {
+        val where = if (curToken.type == EOF) "at end" else "at '${curToken.lexeme}'"
+        Lox.report(curToken.line, where, message)
+        return ParseError(curToken, message)
     }
 
     private fun consume(type: TokenType, message: String): Token {
         if (check(type)) return advance()
         throw error(message)
+    }
+
+    private fun synchronize() {
+        advance()
+
+        while (!isAtEnd) {
+            if (prevToken.type == SEMICOLON) return
+
+            if (curToken.type in listOf(CLASS, FUN, VAR, FOR, IF, WHILE, PRINT, RETURN)) return
+
+            advance()
+        }
     }
 
     private fun parseLeftAssoc(subExpr: () -> Expr, vararg tokenTypes: TokenType): Expr {
@@ -79,6 +91,12 @@ class Parser(private val tokens: List<Token>) {
             consume(RIGHT_PAREN, "parentheses not balanced")
             Expr.Grouping(expression)
         }
-        else -> throw error("unexpected primary")
+        else -> throw error("expect expression")
+    }
+
+    fun parse() = try {
+        expression()
+    } catch (error: ParseError) {
+        null
     }
 }

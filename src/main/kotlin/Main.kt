@@ -39,6 +39,9 @@ object Lox {
     fun runInterpreter(code: String) {
         val tokens = Scanner(code).scanTokens()
         tokens.forEach(::println)
+        val expr = Parser(tokens).parse()
+        if (hadError) return
+        println(expr?.verbose())
     }
 
     fun error(line: Int, message: String) {
