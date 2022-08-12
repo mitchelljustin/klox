@@ -29,7 +29,7 @@ object Lox {
 
     private fun runPrompt() {
         while (true) {
-            print("> ")
+            print(">> ")
             val line = readLine() ?: break
             runInterpreter(line)
             hadError = false
@@ -37,12 +37,13 @@ object Lox {
     }
 
     private fun runInterpreter(code: String) {
-        val tokens = Scanner(code).scanTokens()
-        tokens.forEach(::println)
-        val expr = Parser(tokens).parse()
-        if (hadError) println("HAD ERROR")
-        println(expr)
-        println(expr?.verbose())
+        val tokens = Scanner(code).scan()
+        println(tokens.joinToString(", "))
+        val expr = Parser(tokens).parse() ?: return
+        if (hadError) return
+        println(expr.verbose())
+        val result = Interpreter().interpret(expr)
+        println("=> $result")
     }
 
     fun error(line: Int, message: String) {

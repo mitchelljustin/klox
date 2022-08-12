@@ -15,7 +15,7 @@ class Scanner(
     private val ALPHA = listOf('a'..'z', 'A'..'Z', '_'..'_').flatten()
     private val ALPHANUM = listOf(DIGITS, ALPHA).flatten()
 
-    fun scanTokens(): List<Token> {
+    fun scan(): List<Token> {
         while (!isAtEnd) {
             start = current
             scanToken()
