@@ -19,7 +19,7 @@ object Lox {
         }
     }
 
-    fun runFile(filename: String) {
+    private fun runFile(filename: String) {
         val code = Files.readString(Paths.get(filename), Charset.defaultCharset())
         runInterpreter(code)
         if (hadError) {
@@ -27,7 +27,7 @@ object Lox {
         }
     }
 
-    fun runPrompt() {
+    private fun runPrompt() {
         while (true) {
             print("> ")
             val line = readLine() ?: break
@@ -36,11 +36,12 @@ object Lox {
         }
     }
 
-    fun runInterpreter(code: String) {
+    private fun runInterpreter(code: String) {
         val tokens = Scanner(code).scanTokens()
         tokens.forEach(::println)
         val expr = Parser(tokens).parse()
-        if (hadError) return
+        if (hadError) println("HAD ERROR")
+        println(expr)
         println(expr?.verbose())
     }
 

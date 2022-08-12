@@ -1,6 +1,8 @@
 import TokenType.*
 
-class Scanner(val source: String) {
+class Scanner(
+    private val source: String,
+) {
     private var tokens = ArrayList<Token>()
     private var start = 0
     private var current = 0

@@ -66,11 +66,21 @@ class Parser(private val tokens: List<Token>) {
         return expr
     }
 
-    private fun expression() = equality()
-    private fun equality() = parseLeftAssoc(::comparison, EQUAL_EQUAL, BANG_EQUAL)
-    private fun comparison() = parseLeftAssoc(::term, GREATER, GREATER_EQUAL, LESS, LESS_EQUAL)
-    private fun term() = parseLeftAssoc(::factor, MINUS, PLUS)
-    private fun factor() = parseLeftAssoc(::unary, SLASH, STAR)
+    private fun expression() =
+        equality()
+
+    private fun equality() =
+        parseLeftAssoc(::comparison, EQUAL_EQUAL, BANG_EQUAL)
+
+    private fun comparison() =
+        parseLeftAssoc(::term, GREATER, GREATER_EQUAL, LESS, LESS_EQUAL)
+
+    private fun term() =
+        parseLeftAssoc(::factor, MINUS, PLUS)
+
+    private fun factor() =
+        parseLeftAssoc(::unary, SLASH, STAR)
+
     private fun unary(): Expr {
         if (match(BANG, MINUS)) {
             val operator = prevToken
