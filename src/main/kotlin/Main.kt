@@ -5,8 +5,6 @@ import kotlin.system.exitProcess
 
 
 object Lox {
-    private var hadError = false
-
     fun main(args: Array<String>) {
         when (args.size) {
             0 -> runPrompt()
@@ -22,28 +20,27 @@ object Lox {
     private fun runFile(filename: String) {
         val code = Files.readString(Paths.get(filename), Charset.defaultCharset())
         runInterpreter(code)
-        if (hadError) {
-            exitProcess(65)
-        }
     }
 
     private fun runPrompt() {
         while (true) {
             print(">> ")
             val line = readLine() ?: break
-            runInterpreter(line)
-            hadError = false
+            try {
+                val result = runInterpreter(line, verbose = true)
+                if (result != null) println("=> $result")
+            } catch (err: Exception) {
+                System.err.println(err)
+            }
         }
     }
 
-    private fun runInterpreter(code: String) {
+    private fun runInterpreter(code: String, verbose: Boolean = false): Value {
         val tokens = Scanner(code).scan()
-        println(tokens.joinToString(", "))
-        val expr = Parser(tokens).parse() ?: return
-        if (hadError) return
-        println(expr.verbose())
-        val result = Interpreter().interpret(expr)
-        println("=> $result")
+        if (verbose) println(tokens.joinToString(", "))
+        val expr = Parser(tokens).parse()
+        if (verbose) println(expr)
+        return Interpreter().interpret(expr)
     }
 
     fun error(line: Int, message: String) {
@@ -52,7 +49,6 @@ object Lox {
 
     fun report(line: Int, where: String, message: String) {
         System.err.println("[line $line] Error$where: $message")
-        hadError = true
     }
 }
 

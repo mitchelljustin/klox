@@ -1,25 +1,23 @@
-abstract class AST {
-    open fun verbose() = toString()
+abstract class AST
+
+class Program(val stmts: List<Stmt>) : AST() {
+    override fun toString() = "Program(\n${stmts.joinToString("\n")}\n)"
+}
+
+open class Stmt : AST() {
+    data class ExprStmt(val expr: Expr) : Stmt()
+
+    data class PrintStmt(val expr: Expr) : Stmt()
+
+    data class VariableDecl(val target: String, val expr: Expr) : Stmt()
 }
 
 open class Expr : AST() {
-    class Binary(val left: Expr, val operator: Token, val right: Expr) : Expr() {
-        override fun toString() = "$left ${operator.lexeme} $right"
+    data class Binary(val left: Expr, val operator: Token, val right: Expr) : Expr()
 
-        override fun verbose() = "Binary(${left.verbose()}, $operator, ${right.verbose()})"
-    }
+    data class Grouping(val expression: Expr) : Expr()
 
-    class Grouping(val expression: Expr) : Expr() {
-        override fun toString() = "( $expression )"
-
-        override fun verbose() = "Grouping(${expression.verbose()}"
-    }
-
-    class Unary(val operator: Token, val right: Expr) : Expr() {
-        override fun toString() = "${operator.lexeme} $right"
-
-        override fun verbose() = "Unary($operator, ${right.verbose()})"
-    }
+    data class Unary(val operator: Token, val right: Expr) : Expr()
 
     class Literal(val value: Any?) : Expr() {
         override fun toString() = when (value) {
@@ -30,8 +28,6 @@ open class Expr : AST() {
             null -> "null"
             else -> "?"
         }
-
-        override fun verbose() = "Literal(${toString()})"
     }
 }
 

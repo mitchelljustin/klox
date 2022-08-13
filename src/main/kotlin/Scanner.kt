@@ -8,6 +8,7 @@ class Scanner(
     private var current = 0
     private var line = 0
 
+    private val isAtEnd get() = current >= source.length
     private val curChar: Char? get() = source.getOrNull(current)
     private val nextChar: Char? get() = source.getOrNull(current + 1)
 
@@ -16,12 +17,29 @@ class Scanner(
     private val ALPHANUM = listOf(DIGITS, ALPHA).flatten()
 
     fun scan(): List<Token> {
+        tokens.clear()
         while (!isAtEnd) {
             start = current
             scanToken()
         }
         tokens.add(Token(EOF, "", line))
         return tokens
+    }
+
+    private fun advance() = source[current++]
+
+    private fun addToken(type: TokenType, literal: Any? = null) {
+        val lexeme = source.slice(start until current)
+        tokens.add(Token(type, lexeme, line, literal))
+    }
+
+    private fun match(expected: Char) = when {
+        isAtEnd -> false
+        curChar != expected -> false
+        else -> {
+            current++
+            true
+        }
     }
 
     private fun scanToken() {
@@ -109,23 +127,5 @@ class Scanner(
 
         val literal = source.slice(start + 1 until current - 1) // omit quotes
         addToken(STRING, literal)
-    }
-
-    private val isAtEnd get() = current >= source.length
-
-    private fun advance() = source[current++]
-
-    private fun addToken(type: TokenType, literal: Any? = null) {
-        val lexeme = source.slice(start until current)
-        tokens.add(Token(type, lexeme, line, literal))
-    }
-
-    private fun match(expected: Char) = when {
-        isAtEnd -> false
-        curChar != expected -> false
-        else -> {
-            current++
-            true
-        }
     }
 }

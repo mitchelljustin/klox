@@ -19,8 +19,5 @@ enum class TokenType {
 }
 
 class Token(val type: TokenType, val lexeme: String, val line: Int, val literal: Any? = null) {
-
-    override fun toString() =
-        if (literal == null) "$type $lexeme"
-        else "$type $lexeme $literal"
+    override fun toString() = "$type($lexeme)"
 }

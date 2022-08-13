@@ -5,7 +5,7 @@ class Parser(private val tokens: List<Token>) {
         private val token: Token,
         override val message: String? = null,
     ) : kotlin.Exception(message) {
-        override fun toString() = "[Line ${token.line}] $message ($token)"
+        override fun toString() = "[line ${token.line}] $message $token"
     }
 
     private var current = 0
@@ -13,6 +13,7 @@ class Parser(private val tokens: List<Token>) {
     private val curToken get() = tokens[current]
     private val isAtEnd get() = curToken.type == EOF
     private val prevToken get() = tokens[current - 1]
+
 
     private fun match(vararg types: TokenType): Boolean {
         for (type in types) {
@@ -32,13 +33,13 @@ class Parser(private val tokens: List<Token>) {
     }
 
     private fun error(message: String): ParseError {
-        val where = if (curToken.type == EOF) "at end" else "at '${curToken.lexeme}'"
+        val where = if (curToken.type == EOF) " at end" else " at '${curToken.lexeme}'"
         Lox.report(curToken.line, where, message)
         return ParseError(curToken, message)
     }
 
     private fun consume(type: TokenType, message: String): Token {
-        if (check(type)) return advance()
+        if (!isAtEnd && check(type)) return advance()
         throw error(message)
     }
 
@@ -65,6 +66,31 @@ class Parser(private val tokens: List<Token>) {
 
         return expr
     }
+
+    fun parse() = program()
+
+    private fun program(): Program {
+        val stmts = ArrayList<Stmt>()
+        while (!isAtEnd) {
+            stmts.add(stmt())
+        }
+        return Program(stmts)
+    }
+
+    private fun stmt(): Stmt {
+        val stmt = when {
+            match(PRINT) -> printStmt()
+            else -> exprStmt()
+        }
+        consume(SEMICOLON, "expected semicolon at end of stmt")
+        return stmt
+    }
+
+    private fun printStmt() =
+        Stmt.PrintStmt(expression())
+
+    private fun exprStmt() =
+        Stmt.ExprStmt(expression())
 
     private fun expression() =
         equality()
@@ -104,9 +130,4 @@ class Parser(private val tokens: List<Token>) {
         else -> throw error("expect expression")
     }
 
-    fun parse() = try {
-        expression()
-    } catch (error: ParseError) {
-        null
-    }
 }

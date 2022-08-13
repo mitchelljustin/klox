@@ -1,12 +1,28 @@
 import TokenType.*
 
-typealias Value = Any?
-
 class Interpreter {
 
-    class RuntimeError(message: String, val token: Token? = null, val expr: Expr? = null) : kotlin.Exception(message)
+    class RuntimeError(message: String, token: Token? = null, expr: Expr? = null) :
+        kotlin.Exception("$message ${token ?: ""} ${expr ?: ""}")
 
-    fun interpret(expr: Expr): Value = eval(expr)
+    private var environment = Environment()
+
+    fun interpret(program: Program): Value {
+        var lastValue: Value = null
+        for (stmt in program.stmts) {
+            lastValue = exec(stmt)
+        }
+        return lastValue
+    }
+
+    private fun exec(stmt: Stmt): Value = when (stmt) {
+        is Stmt.PrintStmt -> {
+            println(eval(stmt.expr))
+            null
+        }
+        is Stmt.ExprStmt -> eval(stmt.expr)
+        else -> throw RuntimeError("unknown stmt type")
+    }
 
     private fun eval(expr: Expr): Value = when (expr) {
         is Expr.Binary -> evalBinaryExpr(expr)
@@ -21,7 +37,7 @@ class Interpreter {
         return when (expr.operator.type) {
             MINUS ->
                 if (right is Double) -right
-                else throw RuntimeError("rhs must be number type for operator", expr.operator)
+                else throw RuntimeError("rhs must be double for unary minus")
             BANG -> !isTruthy(right)
             else -> throw RuntimeError("unexpected unary operator", expr.operator)
         }
@@ -51,19 +67,19 @@ class Interpreter {
         try {
             left = leftObj as Double
             right = rightObj as Double
-        } catch (err: TypeCastException) {
-            throw RuntimeError("both lhs and rhs must be number type for operator", operator)
+        } catch (err: ClassCastException) {
+            throw RuntimeError("both lhs and rhs must be double for operator", operator)
         }
         return when (operator.type) {
             PLUS -> left + right
-            MINUS -> left + right
+            MINUS -> left - right
             STAR -> left * right
             SLASH -> left / right
             GREATER -> left > right
             GREATER_EQUAL -> left >= right
             LESS -> left < right
             LESS_EQUAL -> left <= right
-            else -> throw RuntimeError("unexpected operator for number", operator)
+            else -> throw RuntimeError("unexpected operator for double", operator)
         }
     }
 
