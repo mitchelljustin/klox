@@ -3,7 +3,14 @@ class Environment {
 
     operator fun get(ident: String): Value = binding[ident]
 
-    operator fun set(ident: String, value: Value) {
-        binding[ident] = value
+    fun define(target: String, init: Value = null) {
+        binding[target] = init
     }
+
+    fun assign(target: String, value: Value): Boolean {
+        if (target !in binding) return false
+        binding[target] = value
+        return true
+    }
+
 }

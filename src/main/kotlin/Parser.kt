@@ -80,10 +80,9 @@ class Parser(private val tokens: List<Token>) {
     private fun declaration(): Stmt = when {
         match(VAR) -> {
             val name = consume(IDENTIFIER, "expected identifier after 'var'")
-            consume(EQUAL, "expected equal after 'var _'")
-            val expr = expression()
+            val init = if (match(EQUAL)) expression() else null
             consume(SEMICOLON, "expected semicolon at end of stmt")
-            Stmt.VariableDecl(Ident(name.lexeme), expr)
+            Stmt.VariableDecl(Ident(name.lexeme), init)
         }
         else -> statement()
     }
@@ -104,7 +103,20 @@ class Parser(private val tokens: List<Token>) {
         Stmt.ExprStmt(expression())
 
     private fun expression() =
-        equality()
+        assignment()
+
+    private fun assignment(): Expr {
+        val expr = equality()
+
+        if (match(EQUAL)) {
+            val value = assignment()
+            if (expr is Expr.Variable)
+                return Expr.Assignment(target = expr.variable, value)
+            throw error("expected variable on lhs of equal(=)")
+        }
+
+        return expr
+    }
 
     private fun equality() =
         parseLeftAssoc(::comparison, EQUAL_EQUAL, BANG_EQUAL)
@@ -138,7 +150,7 @@ class Parser(private val tokens: List<Token>) {
             consume(RIGHT_PAREN, "parentheses not balanced")
             Expr.Grouping(expression)
         }
-        match(IDENTIFIER) -> Expr.Identifier(Ident(prevToken.lexeme))
+        match(IDENTIFIER) -> Expr.Variable(Ident(prevToken.lexeme))
         else -> throw error("expected expression")
     }
 

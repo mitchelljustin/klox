@@ -9,7 +9,8 @@ open class Stmt : AST() {
 
     data class PrintStmt(val expr: Expr) : Stmt()
 
-    data class VariableDecl(val target: Ident, val expr: Expr) : Stmt()
+
+    data class VariableDecl(val target: Ident, val init: Expr?) : Stmt()
 }
 
 open class Expr : AST() {
@@ -19,7 +20,9 @@ open class Expr : AST() {
 
     data class Unary(val operator: Token, val right: Expr) : Expr()
 
-    data class Identifier(val ident: Ident) : Expr()
+    data class Variable(val variable: Ident) : Expr()
+
+    data class Assignment(val target: Ident, val value: Expr) : Expr()
 
     class Literal(val value: Any?) : Expr() {
         override fun toString() = when (value) {

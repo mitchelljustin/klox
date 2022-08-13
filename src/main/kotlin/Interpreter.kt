@@ -17,8 +17,9 @@ class Interpreter {
 
     private fun exec(stmt: Stmt): Value = when (stmt) {
         is Stmt.VariableDecl -> {
-            val value = eval(stmt.expr)
-            environment[stmt.target.name] = value
+            val value = if (stmt.init != null) eval(stmt.init) else null
+            val target = stmt.target.name
+            environment.define(target, value)
             value
         }
         is Stmt.PrintStmt -> {
@@ -34,7 +35,15 @@ class Interpreter {
         is Expr.Literal -> expr.value
         is Expr.Unary -> evalUnaryExpr(expr)
         is Expr.Grouping -> eval(expr.expression)
-        is Expr.Identifier -> environment[expr.ident.name]
+        is Expr.Variable -> environment[expr.variable.name]
+        is Expr.Assignment -> {
+            val target = expr.target.name
+            val value = eval(expr.value)
+            if (!environment.assign(target, value))
+                throw RuntimeError("undefined variable '$target'", expr)
+
+            value
+        }
         else -> throw RuntimeError("unknown expr type", expr)
     }
 
@@ -75,7 +84,7 @@ class Interpreter {
             left = leftObj as Double
             right = rightObj as Double
         } catch (err: ClassCastException) {
-            throw RuntimeError("both lhs and rhs must be double for operator", expr)
+            throw RuntimeError("both lhs and rhs must be numbers for $operator", expr)
         }
         return when (operator.type) {
             PLUS -> left + right
@@ -86,7 +95,7 @@ class Interpreter {
             GREATER_EQUAL -> left >= right
             LESS -> left < right
             LESS_EQUAL -> left <= right
-            else -> throw RuntimeError("unexpected operator for double", expr)
+            else -> throw RuntimeError("unexpected operator for numbers", expr)
         }
     }
 
