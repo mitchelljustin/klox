@@ -4,7 +4,9 @@ import java.nio.file.Paths
 import kotlin.system.exitProcess
 
 
-object Lox {
+class Lox {
+    private var interpreter = Interpreter()
+
     fun main(args: Array<String>) {
         when (args.size) {
             0 -> runPrompt()
@@ -40,7 +42,7 @@ object Lox {
         if (verbose) println(tokens.joinToString(", "))
         val expr = Parser(tokens).parse()
         if (verbose) println(expr)
-        return Interpreter().interpret(expr)
+        return interpreter.interpret(expr)
     }
 
     fun error(line: Int, message: String) {
@@ -52,4 +54,4 @@ object Lox {
     }
 }
 
-fun main(args: Array<String>) = Lox.main(args)
+fun main(args: Array<String>) = Lox().main(args)

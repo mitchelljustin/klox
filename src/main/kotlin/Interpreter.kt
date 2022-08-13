@@ -2,8 +2,8 @@ import TokenType.*
 
 class Interpreter {
 
-    class RuntimeError(message: String, token: Token? = null, expr: Expr? = null) :
-        kotlin.Exception("$message ${token ?: ""} ${expr ?: ""}")
+    class RuntimeError(message: String, ast: AST) :
+        kotlin.Exception("$message $ast")
 
     private var environment = Environment()
 
@@ -16,12 +16,17 @@ class Interpreter {
     }
 
     private fun exec(stmt: Stmt): Value = when (stmt) {
+        is Stmt.VariableDecl -> {
+            val value = eval(stmt.expr)
+            environment[stmt.target.name] = value
+            value
+        }
         is Stmt.PrintStmt -> {
             println(eval(stmt.expr))
             null
         }
         is Stmt.ExprStmt -> eval(stmt.expr)
-        else -> throw RuntimeError("unknown stmt type")
+        else -> throw RuntimeError("unknown stmt type", stmt)
     }
 
     private fun eval(expr: Expr): Value = when (expr) {
@@ -29,7 +34,8 @@ class Interpreter {
         is Expr.Literal -> expr.value
         is Expr.Unary -> evalUnaryExpr(expr)
         is Expr.Grouping -> eval(expr.expression)
-        else -> throw RuntimeError("unknown expr type")
+        is Expr.Identifier -> environment[expr.ident.name]
+        else -> throw RuntimeError("unknown expr type", expr)
     }
 
     private fun evalUnaryExpr(expr: Expr.Unary): Value {
@@ -37,9 +43,9 @@ class Interpreter {
         return when (expr.operator.type) {
             MINUS ->
                 if (right is Double) -right
-                else throw RuntimeError("rhs must be double for unary minus")
+                else throw RuntimeError("rhs must be double for unary minus", expr)
             BANG -> !isTruthy(right)
-            else -> throw RuntimeError("unexpected unary operator", expr.operator)
+            else -> throw RuntimeError("unexpected unary operator", expr)
         }
     }
 
@@ -58,17 +64,18 @@ class Interpreter {
                 return !isEqual(leftObj, rightObj)
             else -> {}
         }
-        return evalBinaryExprDouble(operator, leftObj, rightObj)
+        return evalBinaryExprDouble(expr, leftObj, rightObj)
     }
 
-    private fun evalBinaryExprDouble(operator: Token, leftObj: Value, rightObj: Value): Value {
+    private fun evalBinaryExprDouble(expr: Expr.Binary, leftObj: Value, rightObj: Value): Value {
+        val operator = expr.operator
         val left: Double
         val right: Double
         try {
             left = leftObj as Double
             right = rightObj as Double
         } catch (err: ClassCastException) {
-            throw RuntimeError("both lhs and rhs must be double for operator", operator)
+            throw RuntimeError("both lhs and rhs must be double for operator", expr)
         }
         return when (operator.type) {
             PLUS -> left + right
@@ -79,7 +86,7 @@ class Interpreter {
             GREATER_EQUAL -> left >= right
             LESS -> left < right
             LESS_EQUAL -> left <= right
-            else -> throw RuntimeError("unexpected operator for double", operator)
+            else -> throw RuntimeError("unexpected operator for double", expr)
         }
     }
 

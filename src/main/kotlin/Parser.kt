@@ -4,8 +4,9 @@ class Parser(private val tokens: List<Token>) {
     class ParseError(
         private val token: Token,
         override val message: String? = null,
+        private val where: String? = null,
     ) : kotlin.Exception(message) {
-        override fun toString() = "[line ${token.line}] $message $token"
+        override fun toString() = "[line ${token.line}${where ?: ""}] $message $token"
     }
 
     private var current = 0
@@ -34,8 +35,7 @@ class Parser(private val tokens: List<Token>) {
 
     private fun error(message: String): ParseError {
         val where = if (curToken.type == EOF) " at end" else " at '${curToken.lexeme}'"
-        Lox.report(curToken.line, where, message)
-        return ParseError(curToken, message)
+        return ParseError(curToken, message, where)
     }
 
     private fun consume(type: TokenType, message: String): Token {
@@ -72,12 +72,23 @@ class Parser(private val tokens: List<Token>) {
     private fun program(): Program {
         val stmts = ArrayList<Stmt>()
         while (!isAtEnd) {
-            stmts.add(stmt())
+            stmts.add(declaration())
         }
         return Program(stmts)
     }
 
-    private fun stmt(): Stmt {
+    private fun declaration(): Stmt = when {
+        match(VAR) -> {
+            val name = consume(IDENTIFIER, "expected identifier after 'var'")
+            consume(EQUAL, "expected equal after 'var _'")
+            val expr = expression()
+            consume(SEMICOLON, "expected semicolon at end of stmt")
+            Stmt.VariableDecl(Ident(name.lexeme), expr)
+        }
+        else -> statement()
+    }
+
+    private fun statement(): Stmt {
         val stmt = when {
             match(PRINT) -> printStmt()
             else -> exprStmt()
@@ -127,7 +138,8 @@ class Parser(private val tokens: List<Token>) {
             consume(RIGHT_PAREN, "parentheses not balanced")
             Expr.Grouping(expression)
         }
-        else -> throw error("expect expression")
+        match(IDENTIFIER) -> Expr.Identifier(Ident(prevToken.lexeme))
+        else -> throw error("expected expression")
     }
 
 }

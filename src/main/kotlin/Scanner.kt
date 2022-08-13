@@ -3,6 +3,11 @@ import TokenType.*
 class Scanner(
     private val source: String,
 ) {
+    class ScanError(
+        override val message: String,
+        line: Int,
+    ) : kotlin.Exception("[line $line] $message")
+
     private var tokens = ArrayList<Token>()
     private var start = 0
     private var current = 0
@@ -43,7 +48,7 @@ class Scanner(
     }
 
     private fun scanToken() {
-        when (advance()) {
+        when (val char = advance()) {
             '(' -> addToken(LEFT_PAREN)
             ')' -> addToken(RIGHT_PAREN)
             '{' -> addToken(LEFT_BRACE)
@@ -70,9 +75,7 @@ class Scanner(
             '"' -> string()
             in DIGITS -> number()
             in ALPHA -> identifier()
-            else -> {
-                Lox.error(line, "Unexpected character.")
-            }
+            else -> throw ScanError("unexpected char: '$char'", line)
         }
     }
 
@@ -118,10 +121,7 @@ class Scanner(
             advance()
         }
 
-        if (isAtEnd) {
-            Lox.error(line, "Unterminated string.")
-            return
-        }
+        if (isAtEnd) throw ScanError("unterminated string", line)
 
         advance()
 
