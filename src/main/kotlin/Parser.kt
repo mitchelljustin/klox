@@ -89,11 +89,20 @@ class Parser(private val tokens: List<Token>) {
 
     private fun statement(): Stmt {
         val stmt = when {
+            match(LEFT_BRACE) -> return block()
             match(PRINT) -> printStmt()
             else -> exprStmt()
         }
         consume(SEMICOLON, "expected semicolon at end of stmt")
         return stmt
+    }
+
+    private fun block(): Stmt.Block {
+        val stmts = ArrayList<Stmt>()
+        while (!check(RIGHT_BRACE) && !isAtEnd)
+            stmts.add(declaration())
+        consume(RIGHT_BRACE, "expected '}' after block")
+        return Stmt.Block(stmts)
     }
 
     private fun printStmt() =

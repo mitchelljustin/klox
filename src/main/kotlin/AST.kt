@@ -5,10 +5,13 @@ class Program(val stmts: List<Stmt>) : AST() {
 }
 
 open class Stmt : AST() {
+    class Block(val stmts: List<Stmt>) : Stmt() {
+        override fun toString() = "Block(\n${stmts.joinToString("\n")}\n)"
+    }
+
     data class ExprStmt(val expr: Expr) : Stmt()
 
     data class PrintStmt(val expr: Expr) : Stmt()
-
 
     data class VariableDecl(val target: Ident, val init: Expr?) : Stmt()
 }

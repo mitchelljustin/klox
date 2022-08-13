@@ -2,17 +2,28 @@ import TokenType.*
 
 class Interpreter {
 
-    class RuntimeError(message: String, ast: AST) :
-        kotlin.Exception("$message $ast")
+    class RuntimeError(message: String, ast: AST? = null) :
+        kotlin.Exception("$message ${ast ?: ""}")
 
     private var environment = Environment()
 
-    fun interpret(program: Program): Value {
+    fun interpret(program: Program) = execStmts(program.stmts)
+
+    private fun execStmts(stmts: List<Stmt>): Value {
         var lastValue: Value = null
-        for (stmt in program.stmts) {
+        for (stmt in stmts) {
             lastValue = exec(stmt)
         }
         return lastValue
+    }
+
+    private fun scopePush() {
+        environment = Environment(environment)
+    }
+
+    private fun scopePop() {
+        if (environment.parent == null) throw RuntimeError("cannot pop global scope")
+        environment = environment.parent!!
     }
 
     private fun exec(stmt: Stmt): Value = when (stmt) {
@@ -21,6 +32,12 @@ class Interpreter {
             val target = stmt.target.name
             environment.define(target, value)
             value
+        }
+        is Stmt.Block -> {
+            scopePush()
+            val result = execStmts(stmt.stmts)
+            scopePop()
+            result
         }
         is Stmt.PrintStmt -> {
             println(eval(stmt.expr))
