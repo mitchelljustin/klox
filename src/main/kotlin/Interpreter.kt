@@ -45,7 +45,7 @@ class Interpreter {
             scopePop()
             result
         }
-        is Stmt.ExprStmt -> toValue(eval(stmt.expr))
+        is Stmt.ExprStmt -> eval(stmt.expr)
         else -> throw RuntimeError("unknown stmt type", stmt)
     }
 
@@ -54,7 +54,7 @@ class Interpreter {
         is Expr.Literal -> expr.value
         is Expr.Unary -> evalUnaryExpr(expr)
         is Expr.Grouping -> eval(expr.expression)
-        is Expr.Variable -> environment.resolve(expr.variable.name)
+        is Expr.Variable -> environment.resolve(expr.target.name)
         is Expr.Call -> {
             val callee = eval(expr.target)
             if (callee !is Callable)
@@ -64,7 +64,7 @@ class Interpreter {
                 throw RuntimeError("call has the wrong arity: $callArity != ${callee.arity}", expr)
             val arguments = expr.arguments.map(::eval).toTypedArray()
             val result = callee.call(*arguments)
-            result
+            toValue(result)
         }
         is Expr.Assignment -> {
             val target = expr.target.name

@@ -1,5 +1,5 @@
 class Environment(val parent: Environment? = null) {
-    class NotFoundError(val target: String) : Exception("value not found: '$target'")
+    class NotFoundError(target: String) : Exception("value not found: '$target'")
 
     private var binding = HashMap<String, Value>()
 

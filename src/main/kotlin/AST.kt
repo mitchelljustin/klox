@@ -25,7 +25,7 @@ open class Expr : AST() {
 
     data class Unary(val operator: Token, val right: Expr) : Expr()
 
-    data class Variable(val variable: Ident) : Expr()
+    data class Variable(val target: Ident) : Expr()
 
     data class Assignment(val target: Ident, val value: Expr) : Expr()
 

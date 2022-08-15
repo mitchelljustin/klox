@@ -102,7 +102,7 @@ class Parser(private val tokens: List<Token>) {
         if (match(EQUAL)) {
             val value = assignment()
             if (expr is Expr.Variable)
-                return Expr.Assignment(target = expr.variable, value)
+                return Expr.Assignment(target = expr.target, value)
             throw error("expected variable on lhs of equal(=)")
         }
 
