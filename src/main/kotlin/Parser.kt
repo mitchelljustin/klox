@@ -49,7 +49,7 @@ class Parser(private val tokens: List<Token>) {
         while (!isAtEnd) {
             if (prevToken.type == SEMICOLON) return
 
-            if (curToken.type in listOf(CLASS, FUN, VAR, FOR, IF, WHILE, PRINT, RETURN)) return
+            if (curToken.type in listOf(CLASS, FUN, LET, FOR, IF, WHILE, RETURN)) return
 
             advance()
         }
@@ -64,7 +64,7 @@ class Parser(private val tokens: List<Token>) {
     }
 
     private fun declaration(): Stmt = when {
-        match(VAR) -> {
+        match(LET) -> {
             val name = consume(IDENTIFIER, "expected identifier after 'var'")
             val init = if (match(EQUAL)) expression() else null
             consume(SEMICOLON, "expected semicolon at end of stmt")
@@ -76,7 +76,6 @@ class Parser(private val tokens: List<Token>) {
     private fun statement(): Stmt {
         val stmt = when {
             match(LEFT_BRACE) -> return block()
-            match(PRINT) -> printStmt()
             else -> exprStmt()
         }
         consume(SEMICOLON, "expected semicolon at end of stmt")
@@ -90,9 +89,6 @@ class Parser(private val tokens: List<Token>) {
         consume(RIGHT_BRACE, "expected '}' after block")
         return Stmt.Block(stmts)
     }
-
-    private fun printStmt() =
-        Stmt.PrintStmt(expression())
 
     private fun exprStmt() =
         Stmt.ExprStmt(expression())
@@ -144,7 +140,24 @@ class Parser(private val tokens: List<Token>) {
             return Expr.Unary(operator, right)
         }
 
-        return primary()
+        return call()
+    }
+
+    private fun call(): Expr {
+        val expr = primary()
+
+        if (match(LEFT_PAREN)) {
+            val arguments = ArrayList<Expr>()
+            while (!match(RIGHT_PAREN)) {
+                val argument = expression()
+                arguments.add(argument)
+                if (!check(RIGHT_PAREN))
+                    consume(COMMA, "expected ',' after argument")
+            }
+            return Expr.Call(expr, arguments)
+        }
+
+        return expr
     }
 
     private fun primary() = when {

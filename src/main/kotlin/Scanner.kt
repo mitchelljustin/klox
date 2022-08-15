@@ -92,12 +92,11 @@ class Scanner(
             "if" -> IF
             "nil" -> NIL
             "or" -> OR
-            "print" -> PRINT
             "return" -> RETURN
             "super" -> SUPER
             "this" -> THIS
             "true" -> TRUE
-            "var" -> VAR
+            "let" -> LET
             "while" -> WHILE
             else -> IDENTIFIER
         }

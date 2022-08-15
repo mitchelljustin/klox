@@ -8,6 +8,11 @@ class Interpreter {
     private val global = Environment()
     private var environment = global
 
+    init {
+        global.define("print", Callable.lambda { value -> println(value) })
+        global.define("readLine", Callable.lambda(::readLine))
+    }
+
     fun interpret(program: Program) = execStmts(program.stmts)
 
     private fun execStmts(stmts: List<Stmt>): Value {
@@ -40,11 +45,7 @@ class Interpreter {
             scopePop()
             result
         }
-        is Stmt.PrintStmt -> {
-            println(eval(stmt.expr))
-            null
-        }
-        is Stmt.ExprStmt -> eval(stmt.expr)
+        is Stmt.ExprStmt -> toValue(eval(stmt.expr))
         else -> throw RuntimeError("unknown stmt type", stmt)
     }
 
@@ -53,7 +54,18 @@ class Interpreter {
         is Expr.Literal -> expr.value
         is Expr.Unary -> evalUnaryExpr(expr)
         is Expr.Grouping -> eval(expr.expression)
-        is Expr.Variable -> environment[expr.variable.name]
+        is Expr.Variable -> environment.resolve(expr.variable.name)
+        is Expr.Call -> {
+            val callee = eval(expr.target)
+            if (callee !is Callable)
+                throw RuntimeError("callee must be callable", expr.target)
+            val callArity = expr.arguments.count()
+            if (callee.arity != callArity)
+                throw RuntimeError("call has the wrong arity: $callArity != ${callee.arity}", expr)
+            val arguments = expr.arguments.map(::eval).toTypedArray()
+            val result = callee.call(*arguments)
+            result
+        }
         is Expr.Assignment -> {
             val target = expr.target.name
             val value = eval(expr.value)

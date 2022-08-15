@@ -29,7 +29,7 @@ class Lox {
             print(">> ")
             val line = readLine() ?: break
             try {
-                val result = runInterpreter(line, verbose = false)
+                val result = runInterpreter(line, verbose = true)
                 if (result != null) println("=> $result")
             } catch (err: Exception) {
                 System.err.println("${err::class.simpleName} $err\n")
