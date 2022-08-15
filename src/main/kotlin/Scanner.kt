@@ -14,8 +14,8 @@ class Scanner(
     private var line = 0
 
     private val isAtEnd get() = current >= source.length
-    private val curChar: Char? get() = source.getOrNull(current)
-    private val nextChar: Char? get() = source.getOrNull(current + 1)
+    private val curChar get() = source.getOrNull(current)
+    private val nextChar get() = source.getOrNull(current + 1)
 
     private val DIGITS = '0'..'9'
     private val ALPHA = listOf('a'..'z', 'A'..'Z', '_'..'_').flatten()

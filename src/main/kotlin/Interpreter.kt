@@ -5,7 +5,8 @@ class Interpreter {
     class RuntimeError(message: String, ast: AST? = null) :
         kotlin.Exception("$message ${ast ?: ""}")
 
-    private var environment = Environment()
+    private val global = Environment()
+    private var environment = global
 
     fun interpret(program: Program) = execStmts(program.stmts)
 
@@ -22,7 +23,7 @@ class Interpreter {
     }
 
     private fun scopePop() {
-        if (environment.parent == null) throw RuntimeError("cannot pop global scope")
+        if (environment === global) throw RuntimeError("cannot pop global scope")
         environment = environment.parent!!
     }
 
@@ -122,9 +123,12 @@ class Interpreter {
         else -> true
     }
 
-    private fun isEqual(a: Value, b: Value): Boolean {
-        if (a == null && b == null) return true
-        if (a == null) return false
-        return a == b
+    private fun isEqual(a: Value, b: Value) = when {
+        a == null && b == null ->
+            true
+        a == null ->
+            false
+        else ->
+            a == b
     }
 }

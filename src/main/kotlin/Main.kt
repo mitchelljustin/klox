@@ -29,10 +29,10 @@ class Lox {
             print(">> ")
             val line = readLine() ?: break
             try {
-                val result = runInterpreter(line, verbose = true)
+                val result = runInterpreter(line, verbose = false)
                 if (result != null) println("=> $result")
             } catch (err: Exception) {
-                System.err.println("${err::class.simpleName} $err")
+                System.err.println("${err::class.simpleName} $err\n")
             }
         }
     }
@@ -43,14 +43,6 @@ class Lox {
         val expr = Parser(tokens).parse()
         if (verbose) println(expr)
         return interpreter.interpret(expr)
-    }
-
-    fun error(line: Int, message: String) {
-        report(line, "", message)
-    }
-
-    fun report(line: Int, where: String, message: String) {
-        System.err.println("[line $line] Error$where: $message")
     }
 }
 

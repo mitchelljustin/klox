@@ -55,25 +55,11 @@ class Parser(private val tokens: List<Token>) {
         }
     }
 
-    private fun parseLeftAssoc(subExpr: () -> Expr, vararg tokenTypes: TokenType): Expr {
-        var expr = subExpr()
-
-        while (match(*tokenTypes)) {
-            val operator = prevToken
-            val right = subExpr()
-            expr = Expr.Binary(expr, operator, right)
-        }
-
-        return expr
-    }
-
     fun parse() = program()
 
     private fun program(): Program {
         val stmts = ArrayList<Stmt>()
-        while (!isAtEnd) {
-            stmts.add(declaration())
-        }
+        while (!isAtEnd) stmts.add(declaration())
         return Program(stmts)
     }
 
@@ -122,6 +108,18 @@ class Parser(private val tokens: List<Token>) {
             if (expr is Expr.Variable)
                 return Expr.Assignment(target = expr.variable, value)
             throw error("expected variable on lhs of equal(=)")
+        }
+
+        return expr
+    }
+
+    private fun parseLeftAssoc(nextRule: () -> Expr, vararg tokenTypes: TokenType): Expr {
+        var expr = nextRule()
+
+        while (match(*tokenTypes)) {
+            val operator = prevToken
+            val right = nextRule()
+            expr = Expr.Binary(expr, operator, right)
         }
 
         return expr
