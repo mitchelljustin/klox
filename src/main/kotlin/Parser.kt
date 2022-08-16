@@ -2,58 +2,16 @@ import TokenType.*
 
 class Parser(private val tokens: List<Token>) {
     class ParseError(
-        private val token: Token,
-        override val message: String? = null,
-        private val where: String? = null,
-    ) : kotlin.Exception(message) {
-        override fun toString() = "[line ${token.line}${where ?: ""}] $message $token"
-    }
+        token: Token,
+        message: String = "",
+        where: String = "",
+    ) : Exception("[line ${token.line}$where] $message: $token")
 
     private var current = 0
 
     private val curToken get() = tokens[current]
     private val isAtEnd get() = curToken.type == EOF
     private val prevToken get() = tokens[current - 1]
-
-
-    private fun match(vararg types: TokenType): Boolean {
-        for (type in types) {
-            if (check(type)) {
-                advance()
-                return true
-            }
-        }
-        return false
-    }
-
-    private fun check(type: TokenType) = !isAtEnd && curToken.type == type
-
-    private fun advance(): Token {
-        if (!isAtEnd) current++
-        return prevToken
-    }
-
-    private fun error(message: String): ParseError {
-        val where = if (curToken.type == EOF) " at end" else " at '${curToken.lexeme}'"
-        return ParseError(curToken, message, where)
-    }
-
-    private fun consume(type: TokenType, message: String): Token {
-        if (!isAtEnd && check(type)) return advance()
-        throw error(message)
-    }
-
-    private fun synchronize() {
-        advance()
-
-        while (!isAtEnd) {
-            if (prevToken.type == SEMICOLON) return
-
-            if (curToken.type in listOf(CLASS, FUN, LET, FOR, IF, WHILE, RETURN)) return
-
-            advance()
-        }
-    }
 
     fun parse() = program()
 
@@ -103,14 +61,15 @@ class Parser(private val tokens: List<Token>) {
         }
         if (blockStmt != null)
             return blockStmt
-        val stmt = when {
-            match(RETURN) ->
-                Stmt.Return(expression())
-            else ->
-                exprStmt()
+        val lineStmt = when {
+            match(RETURN) -> Stmt.Return(expression())
+            else -> null
         }
-        consume(SEMICOLON, "expected ';' at end of statement")
-        return stmt
+        if (lineStmt != null) {
+            consume(SEMICOLON, "expected ';' at end of statement")
+            return lineStmt
+        }
+        return exprStmt()
     }
 
     private fun block(): Stmt.Block {
@@ -122,7 +81,8 @@ class Parser(private val tokens: List<Token>) {
     }
 
     private fun exprStmt() =
-        Stmt.ExprStmt(expression())
+        Stmt.ExprStmt(expression(), emitValue = !match(SEMICOLON))
+
 
     private fun expression() =
         assignment()
@@ -133,8 +93,8 @@ class Parser(private val tokens: List<Token>) {
         if (match(EQUAL)) {
             val value = assignment()
             if (expr is Expr.Variable)
-                return Expr.Assignment(target = expr.target, value)
-            throw error("expected variable on lhs of equal(=)")
+                return Expr.Assignment(expr.target, value)
+            throw error("expected variable on lhs of '='")
         }
 
         return expr
@@ -214,4 +174,32 @@ class Parser(private val tokens: List<Token>) {
         if (match(IDENTIFIER)) Ident(prevToken.lexeme)
         else throw error("expected identifier$where")
 
+
+    private fun check(type: TokenType) =
+        !isAtEnd && curToken.type == type
+
+    private fun advance(): Token {
+        if (!isAtEnd) current++
+        return prevToken
+    }
+
+    private fun match(vararg types: TokenType): Boolean {
+        for (type in types) {
+            if (check(type)) {
+                advance()
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun consume(type: TokenType, message: String): Token {
+        if (!isAtEnd && check(type)) return advance()
+        throw error(message)
+    }
+
+    private fun error(message: String): ParseError {
+        val where = if (curToken.type == EOF) " at end" else " at '${curToken.lexeme}'"
+        return ParseError(curToken, message, where)
+    }
 }

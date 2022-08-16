@@ -16,7 +16,7 @@ open class Stmt : AST() {
         override fun toString() = "Block(${listToString(stmts)})"
     }
 
-    data class ExprStmt(val expr: Expr) : Stmt()
+    data class ExprStmt(val expr: Expr, val emitValue: Boolean) : Stmt()
 
     data class Return(val expr: Expr) : Stmt()
 

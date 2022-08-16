@@ -2,7 +2,12 @@ import TokenType.*
 
 class Interpreter {
 
-    class RuntimeError(message: String, ast: AST? = null) : Exception("$message ${ast ?: ""}")
+    class RuntimeError(message: String, ast: AST? = null) : Exception(
+        when (ast) {
+            null -> message
+            else -> "$message: $ast"
+        }
+    )
 
     class Return(val value: Value) : Exception()
 
@@ -10,19 +15,20 @@ class Interpreter {
     private var ctx = global
 
     init {
-        global.define(Callable.BuiltIn("print") { value -> println(value); Value.Null })
+        global.define(Callable.BuiltIn("print") { value -> println(value); Value.Nil })
         global.define(Callable.BuiltIn("readLine") { -> Value(readLine()) })
+        global.define(Callable.BuiltIn("clock") { -> Value(System.currentTimeMillis() / 1000.0) })
+
+        global.define(Callable.BuiltIn("string") { value -> value.map<Any?> { it.toString() } })
+        global.define(Callable.BuiltIn("number") { value -> value.map<Any?> { it as? Double } })
     }
 
     fun interpret(program: Program) = execSequence(program.stmts)
 
-    private fun execSequence(stmts: Iterable<Stmt>): Value {
-        try {
-            stmts.forEach(::exec)
-        } catch (ret: Return) {
-            return ret.value
-        }
-        return Value.Null
+    private fun execSequence(stmts: Iterable<Stmt>): Value = try {
+        stmts.fold(Value.Nil) { _, stmt -> exec(stmt) }
+    } catch (ret: Return) {
+        ret.value
     }
 
     private fun contextPush(function: Callable.FunctionDef? = null): Context {
@@ -36,43 +42,46 @@ class Interpreter {
         ctx = ctx.enclosing!!
     }
 
-    private fun exec(stmt: Stmt) {
-        when (stmt) {
-            is Stmt.VariableDecl -> {
-                val value = if (stmt.init != null) eval(stmt.init) else Value.Null
-                val name = stmt.name.name
-                ctx.define(name, value)
-            }
-            is Stmt.FunctionDef -> {
-                ctx.define(stmt.name.name, Value(Callable.FunctionDef(stmt)))
-            }
-            is Stmt.If -> {
-                val condition = eval(stmt.condition)
-                when {
-                    isTruthy(condition) ->
-                        exec(stmt.ifBody)
-                    stmt.elseBody != null ->
-                        exec(stmt.elseBody)
-                    else -> {}
-                }
-            }
-            is Stmt.Return -> {
-                if (ctx.function == null)
-                    throw RuntimeError("returning outside of a function")
-                val result = eval(stmt.expr)
-                contextPop()
-                throw Return(result)
-            }
-            is Stmt.Block -> {
-                contextPush()
-                execSequence(stmt.stmts)
-                contextPop()
-            }
-            is Stmt.ExprStmt ->
-                eval(stmt.expr)
-            else ->
-                throw RuntimeError("unknown stmt type", stmt)
+    private fun exec(stmt: Stmt): Value = when (stmt) {
+        is Stmt.VariableDecl -> {
+            val value = if (stmt.init != null) eval(stmt.init) else Value.Nil
+            val name = stmt.name.name
+            ctx.define(name, value)
+            Value.Nil
         }
+        is Stmt.FunctionDef -> {
+            ctx.define(stmt.name.name, Value(Callable.FunctionDef(stmt)))
+        }
+        is Stmt.If -> {
+            val condition = eval(stmt.condition)
+            when {
+                isTruthy(condition) ->
+                    exec(stmt.ifBody)
+                stmt.elseBody != null ->
+                    exec(stmt.elseBody)
+                else -> {}
+            }
+            Value.Nil
+        }
+        is Stmt.Return -> {
+            if (ctx.function == null)
+                throw RuntimeError("returning outside of a function")
+            val result = eval(stmt.expr)
+            contextPop()
+            throw Return(result)
+        }
+        is Stmt.Block -> {
+            contextPush()
+            execSequence(stmt.stmts)
+            contextPop()
+            Value.Nil
+        }
+        is Stmt.ExprStmt -> {
+            val value = eval(stmt.expr)
+            if (stmt.emitValue) value else Value.Nil
+        }
+        else ->
+            throw RuntimeError("unknown stmt type", stmt)
     }
 
     private fun eval(expr: Expr): Value = when (expr) {
@@ -82,9 +91,12 @@ class Interpreter {
         is Expr.Grouping -> eval(expr.expression)
         is Expr.Variable -> ctx.resolve(expr.target.name)
         is Expr.Call -> {
-            val callee = eval(expr.target).inner
-            if (callee !is Callable)
-                throw RuntimeError("callee must be callable", expr.target)
+            val callee: Callable
+            try {
+                callee = eval(expr.target).into()
+            } catch (err: ClassCastException) {
+                throw RuntimeError("callee must be a Callable", expr.target)
+            }
             val callArity = expr.arguments.size
             if (callee.arity != callArity)
                 throw RuntimeError("callee expected arity ${callee.arity}, got $callArity", expr)
@@ -104,7 +116,7 @@ class Interpreter {
     }
 
     private fun doCall(callee: Callable, arguments: List<Value>): Value = when (callee) {
-        is Callable.BuiltIn -> Value(callee.call(arguments))
+        is Callable.BuiltIn -> callee.call(arguments)
         is Callable.FunctionDef -> {
             val ctx = contextPush(function = callee)
             for ((param, arg) in callee.def.parameters.zip(arguments))
@@ -122,7 +134,7 @@ class Interpreter {
         val right = eval(expr.right)
         return when (expr.operator.type) {
             MINUS ->
-                if (right.type == VType.Double) Value(-(right.inner as Double))
+                if (right.isDouble) right.map<Double> { -it }
                 else throw RuntimeError("rhs must be double for unary minus", expr)
             BANG ->
                 Value(!isTruthy(right))
@@ -138,7 +150,7 @@ class Interpreter {
         when (operator.type) {
             PLUS ->
                 if (leftObj.isString && rightObj.isString)
-                    return Value((leftObj.inner as String) + (rightObj.inner as String))
+                    return Value(leftObj.into<String>() + rightObj.into<String>())
             EQUAL_EQUAL ->
                 return Value(isEqual(leftObj, rightObj))
             BANG_EQUAL ->
@@ -173,16 +185,16 @@ class Interpreter {
         )
     }
 
-    private fun isTruthy(value: Value) = when (value.type) {
-        VType.Null -> false
-        VType.Boolean -> value.inner as Boolean
+    private fun isTruthy(value: Value): Boolean = when {
+        value.isNil -> false
+        value.isBoolean -> value.into()
         else -> true
     }
 
     private fun isEqual(a: Value, b: Value) = when {
-        a.isNull && b.isNull ->
+        a.isNil && b.isNil ->
             true
-        a.isNull ->
+        a.isNil ->
             false
         else ->
             a == b

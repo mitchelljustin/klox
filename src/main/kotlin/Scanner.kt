@@ -4,11 +4,11 @@ class Scanner(
     private val source: String,
 ) {
     class ScanError(
-        override val message: String,
+        message: String,
         line: Int,
-    ) : kotlin.Exception("[line $line] $message")
+    ) : Exception("[line $line] $message")
 
-    private var tokens = ArrayList<Token>()
+    private val tokens = ArrayList<Token>()
     private var start = 0
     private var current = 0
     private var line = 0
@@ -17,9 +17,28 @@ class Scanner(
     private val curChar get() = source.getOrNull(current)
     private val nextChar get() = source.getOrNull(current + 1)
 
-    private val DIGITS = '0'..'9'
-    private val ALPHA = listOf('a'..'z', 'A'..'Z', '_'..'_').flatten()
-    private val ALPHANUM = listOf(DIGITS, ALPHA).flatten()
+    companion object {
+        private val DIGITS = '0'..'9'
+        private val ALPHA = listOf('a'..'z', 'A'..'Z', '_'..'_').flatten()
+        private val ALPHANUM = listOf(DIGITS, ALPHA).flatten()
+        private val KEYWORDS = hashMapOf(
+            "and" to AND,
+            "class" to CLASS,
+            "else" to ELSE,
+            "false" to FALSE,
+            "for" to FOR,
+            "fun" to FUN,
+            "if" to IF,
+            "nil" to NIL,
+            "or" to OR,
+            "return" to RETURN,
+            "super" to SUPER,
+            "this" to THIS,
+            "true" to TRUE,
+            "let" to LET,
+            "while" to WHILE,
+        )
+    }
 
     fun scan(): List<Token> {
         tokens.clear()
@@ -82,24 +101,8 @@ class Scanner(
     private fun identifier() {
         while (curChar in ALPHANUM) advance()
 
-        val type = when (source.slice(start until current)) {
-            "and" -> AND
-            "class" -> CLASS
-            "else" -> ELSE
-            "false" -> FALSE
-            "for" -> FOR
-            "fun" -> FUN
-            "if" -> IF
-            "nil" -> NIL
-            "or" -> OR
-            "return" -> RETURN
-            "super" -> SUPER
-            "this" -> THIS
-            "true" -> TRUE
-            "let" -> LET
-            "while" -> WHILE
-            else -> IDENTIFIER
-        }
+        val ident = source.slice(start until current)
+        val type = KEYWORDS.getOrDefault(ident, IDENTIFIER)
 
         addToken(type)
     }
@@ -127,4 +130,5 @@ class Scanner(
         val literal = source.slice(start + 1 until current - 1) // omit quotes
         addToken(STRING, literal)
     }
+
 }

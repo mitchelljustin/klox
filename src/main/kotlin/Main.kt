@@ -29,19 +29,19 @@ class Lox {
             print(">> ")
             val line = readLine() ?: break
             try {
-                val result = runInterpreter(line, verbose = true)
-                if (!result.isNull) println("=> $result")
+                val result = runInterpreter(line)
+                if (!result.isNil) println("=> $result")
             } catch (err: Exception) {
-                System.err.println("${err::class.simpleName} $err\n")
+                println("!! ${err::class.simpleName} ${err.message}")
             }
         }
     }
 
-    private fun runInterpreter(code: String, verbose: Boolean = false): Value {
-        if (code.trim().isEmpty()) return Value.Null
+    private fun runInterpreter(code: String): Value {
+        if (code.trim().isEmpty()) return Value.Nil
         val tokens = Scanner(code).scan()
         val expr = Parser(tokens).parse()
-        if (verbose) println(expr.toString().lines().joinToString("\n") { "|| $it" })
+//        println(expr.toString().lines().joinToString("\n") { "|| $it" })
         return interpreter.interpret(expr)
     }
 }

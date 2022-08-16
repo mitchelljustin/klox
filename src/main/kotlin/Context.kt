@@ -10,7 +10,7 @@ class Context(val enclosing: Context? = null, val function: Callable.FunctionDef
         define(builtIn.name, Value(builtIn))
     }
 
-    fun define(name: String, init: Value = Value.Null): Value {
+    fun define(name: String, init: Value = Value.Nil): Value {
         binding[name] = init
         return init
     }
