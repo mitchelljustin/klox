@@ -5,7 +5,7 @@ class Parser(private val tokens: List<Token>) {
         token: Token,
         message: String = "",
         where: String = "",
-    ) : Exception("[line ${token.line}$where] $message, got $token")
+    ) : Exception("[line ${token.pos}$where] $message, got $token")
 
     private var current = 0
 
@@ -23,46 +23,39 @@ class Parser(private val tokens: List<Token>) {
     }
 
     private fun declaration(): Stmt = when {
-        match(LET) -> {
-            val name = ident(" after keyword 'let'")
-            val init = if (match(EQUAL)) expression() else null
-            consume(SEMICOLON, "expected ';' at end of let declaration")
-            Stmt.VariableDecl(name, init)
-        }
-        match(FUN) -> {
-            val name = ident(" after keyword 'fun'")
-            consume(LEFT_PAREN, "expected '(' after function name")
-            val parameters = parenCommaList(::ident, "parameter")
-            consume(LEFT_BRACE, "expected '{' after function signature")
-            val body = block()
-            Stmt.FunctionDef(name, parameters, body)
-        }
+        match(LET) -> variableDecl()
+        match(FUN) -> functionDef()
         else -> statement()
+    }
+
+    private fun variableDecl(): Stmt.VariableDecl {
+        val name = ident(" after keyword 'let'")
+        val init = if (match(EQUAL)) expression() else null
+        consume(SEMICOLON, "expected ';' at end of let declaration")
+        return Stmt.VariableDecl(name, init)
+    }
+
+    private fun functionDef(): Stmt.FunctionDef {
+        val name = ident(" after keyword 'fun'")
+        consume(LEFT_PAREN, "expected '(' after function name")
+        val parameters = parenCommaList(::ident, "parameter")
+        consume(LEFT_BRACE, "expected '{' after function signature")
+        val body = block()
+        return Stmt.FunctionDef(name, parameters, body)
     }
 
     private fun statement(): Stmt {
         val blockStmt = when {
-            match(LEFT_BRACE) ->
-                block()
-            match(IF) -> {
-                consume(LEFT_PAREN, "expected '(' after 'if'")
-                val condition = expression()
-                consume(RIGHT_PAREN, "expected ')' at end of condition")
-                consume(LEFT_BRACE, "expected if body to start with '{'")
-                val ifBody = statement()
-                var elseBody: Stmt? = null
-                if (match(ELSE)) {
-                    consume(LEFT_BRACE, "expected else body to start with '{'")
-                    elseBody = statement()
-                }
-                Stmt.If(condition, ifBody, elseBody)
-            }
+            match(LEFT_BRACE) -> block()
+            match(IF) -> ifStmt()
+            match(FOR) -> forStmt()
             else -> null
         }
         if (blockStmt != null)
             return blockStmt
         val lineStmt = when {
             match(RETURN) -> Stmt.Return(expression())
+            match(BREAK) -> Stmt.Break()
             else -> null
         }
         if (lineStmt != null) {
@@ -70,6 +63,44 @@ class Parser(private val tokens: List<Token>) {
             return lineStmt
         }
         return exprStmt()
+    }
+
+    private fun forStmt(): Stmt.For {
+        consume(LEFT_PAREN, "expected '(' after 'for'")
+        val init = when {
+            match(SEMICOLON) -> null
+            match(LET) -> variableDecl()
+            else -> {
+                val expr = exprStmt()
+                if (expr.emitValue)
+                    throw error("expected ';' after initializer expr")
+                expr
+            }
+        }
+        val condition = when {
+            check(SEMICOLON) -> null
+            else -> expression()
+        }
+        consume(SEMICOLON, "expected ';' after condition")
+        val update = when {
+            check(RIGHT_PAREN) -> null
+            else -> expression()
+        }
+        consume(RIGHT_PAREN, "expected ')' after for clauses")
+        val body = statement()
+        return Stmt.For(init, condition, update, body)
+    }
+
+    private fun ifStmt(): Stmt.If {
+        consume(LEFT_PAREN, "expected '(' after 'if'")
+        val condition = expression()
+        consume(RIGHT_PAREN, "expected ')' at end of condition")
+        val ifBody = statement()
+        var elseBody: Stmt? = null
+        if (match(ELSE)) {
+            elseBody = statement()
+        }
+        return Stmt.If(condition, ifBody, elseBody)
     }
 
     private fun block(): Stmt.Block {
@@ -173,7 +204,7 @@ class Parser(private val tokens: List<Token>) {
             Expr.Grouping(expression)
         }
         check(IDENTIFIER) -> Expr.Variable(ident())
-        else -> throw error("expected expression")
+        else -> throw error("expected primary expression")
     }
 
     private fun ident(where: String? = null) =

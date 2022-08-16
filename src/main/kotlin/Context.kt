@@ -1,7 +1,8 @@
 class Context(val enclosing: Context? = null, val function: Callable.FunctionDef? = null) {
     class NotFoundError(target: String) : Exception("value not found: '$target'")
 
-    private var binding = HashMap<String, Value>()
+    var executingLoop: Boolean = false
+    var binding = HashMap<String, Value>()
 
     fun resolve(target: String): Value =
         binding.getOrElse(target) { enclosing?.resolve(target) } ?: throw NotFoundError(target)

@@ -16,6 +16,7 @@ class Scanner(
     private val isAtEnd get() = current >= source.length
     private val curChar get() = source.getOrNull(current)
     private val nextChar get() = source.getOrNull(current + 1)
+    private val curPos get() = Pos(line, current)
 
     companion object {
         private val DIGITS = '0'..'9'
@@ -37,6 +38,7 @@ class Scanner(
             "true" to TRUE,
             "let" to LET,
             "while" to WHILE,
+            "break" to BREAK,
         )
     }
 
@@ -46,7 +48,7 @@ class Scanner(
             start = current
             scanToken()
         }
-        tokens.add(Token(EOF, "", line))
+        tokens.add(Token(EOF, "", curPos))
         return tokens
     }
 
@@ -54,7 +56,7 @@ class Scanner(
 
     private fun addToken(type: TokenType, literal: Any? = null) {
         val lexeme = source.slice(start until current)
-        tokens.add(Token(type, lexeme, line, literal))
+        tokens.add(Token(type, lexeme, curPos, literal))
     }
 
     private fun match(expected: Char) = when {

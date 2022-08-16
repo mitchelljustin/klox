@@ -1,6 +1,9 @@
 import TokenType.*
 
 class Interpreter {
+    companion object {
+        const val LastValue = "_"
+    }
 
     class RuntimeError(message: String, ast: AST? = null) : Exception(
         when (ast) {
@@ -10,9 +13,15 @@ class Interpreter {
     )
 
     class Return(val value: Value) : Exception()
+    class Break : Exception()
 
     private val global = Context()
     private var ctx = global
+    private var lastValue: Value
+        get() = global.resolve(LastValue)
+        set(value) {
+            global.assign(LastValue, value)
+        }
 
     init {
         global.define(Callable.BuiltIn("print") { value -> println(value); Value.Nil })
@@ -21,12 +30,14 @@ class Interpreter {
 
         global.define(Callable.BuiltIn("string") { value -> value.map<Any?> { it.toString() } })
         global.define(Callable.BuiltIn("number") { value -> value.map<Any?> { it as? Double } })
+        global.define(LastValue)
     }
 
     fun interpret(program: Program) = execSequence(program.stmts)
 
     private fun execSequence(stmts: Iterable<Stmt>): Value = try {
-        stmts.fold(Value.Nil) { _, stmt -> exec(stmt) }
+        stmts.forEach(::exec)
+        lastValue
     } catch (ret: Return) {
         ret.value
     }
@@ -42,46 +53,65 @@ class Interpreter {
         ctx = ctx.enclosing!!
     }
 
-    private fun exec(stmt: Stmt): Value = when (stmt) {
-        is Stmt.VariableDecl -> {
-            val value = if (stmt.init != null) eval(stmt.init) else Value.Nil
-            val name = stmt.name.name
-            ctx.define(name, value)
-            Value.Nil
-        }
-        is Stmt.FunctionDef -> {
-            ctx.define(stmt.name.name, Value(Callable.FunctionDef(stmt)))
-        }
-        is Stmt.If -> {
-            val condition = eval(stmt.condition)
-            when {
-                condition.isTruthy ->
-                    exec(stmt.ifBody)
-                stmt.elseBody != null ->
-                    exec(stmt.elseBody)
-                else -> {}
+    private fun exec(stmt: Stmt): Value {
+        lastValue = when (stmt) {
+            is Stmt.VariableDecl -> {
+                val value = if (stmt.init != null) eval(stmt.init) else Value.Nil
+                val name = stmt.name.name
+                ctx.define(name, value)
+                Value.Nil
             }
-            Value.Nil
+            is Stmt.FunctionDef -> {
+                ctx.define(stmt.name.name, Value(Callable.FunctionDef(stmt)))
+            }
+            is Stmt.If -> {
+                val condition = eval(stmt.condition)
+                when {
+                    condition.isTruthy ->
+                        exec(stmt.ifBody)
+                    stmt.elseBody != null ->
+                        exec(stmt.elseBody)
+                    else -> Value.Nil
+                }
+            }
+            is Stmt.For -> {
+                if (stmt.init != null) exec(stmt.init)
+                val ctx = ctx
+                while (stmt.condition == null || eval(stmt.condition).isTruthy) {
+                    try {
+                        exec(stmt.body)
+                    } catch (_: Break) {
+                        this.ctx = ctx
+                        break
+                    }
+                    if (stmt.update != null) eval(stmt.update)
+                }
+                Value.Nil
+            }
+            is Stmt.Break -> {
+                throw Break()
+            }
+            is Stmt.Return -> {
+                if (ctx.function == null)
+                    throw RuntimeError("returning outside of a function")
+                val result = eval(stmt.expr)
+                contextPop()
+                throw Return(result)
+            }
+            is Stmt.Block -> {
+                contextPush()
+                execSequence(stmt.stmts)
+                contextPop()
+                Value.Nil
+            }
+            is Stmt.ExprStmt -> {
+                val value = eval(stmt.expr)
+                if (stmt.emitValue) value else Value.Nil
+            }
+            else ->
+                throw RuntimeError("unknown stmt type", stmt)
         }
-        is Stmt.Return -> {
-            if (ctx.function == null)
-                throw RuntimeError("returning outside of a function")
-            val result = eval(stmt.expr)
-            contextPop()
-            throw Return(result)
-        }
-        is Stmt.Block -> {
-            contextPush()
-            execSequence(stmt.stmts)
-            contextPop()
-            Value.Nil
-        }
-        is Stmt.ExprStmt -> {
-            val value = eval(stmt.expr)
-            if (stmt.emitValue) value else Value.Nil
-        }
-        else ->
-            throw RuntimeError("unknown stmt type", stmt)
+        return lastValue
     }
 
     private fun eval(expr: Expr): Value = when (expr) {

@@ -14,10 +14,20 @@ enum class TokenType {
     // Keywords.
     AND, CLASS, ELSE, FALSE, FUN, FOR, IF, NIL, OR,
     RETURN, SUPER, THIS, TRUE, LET, WHILE,
+    BREAK,
 
     EOF
 }
 
-class Token(val type: TokenType, val lexeme: String, val line: Int, val literal: Any? = null) {
+data class Pos(val line: Int, val col: Int) {
+    override fun toString() = "$line:$col"
+}
+
+class Token(
+    val type: TokenType,
+    val lexeme: String,
+    val pos: Pos,
+    val literal: Any? = null,
+) {
     override fun toString() = "$type($lexeme)"
 }

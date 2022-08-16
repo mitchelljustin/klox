@@ -20,9 +20,13 @@ open class Stmt : AST() {
 
     data class Return(val expr: Expr) : Stmt()
 
+    class Break : Stmt() {
+        override fun toString() = "Break()"
+    }
+
     data class If(val condition: Expr, val ifBody: Stmt, val elseBody: Stmt?) : Stmt()
 
-    data class For(val init: Stmt, val condition: Expr, val update: Stmt) : Stmt()
+    data class For(val init: Stmt?, val condition: Expr?, val update: Expr?, val body: Stmt) : Stmt()
 
     data class VariableDecl(val name: Ident, val init: Expr?) : Stmt()
 
@@ -54,4 +58,6 @@ open class Expr : AST() {
     }
 }
 
-data class Ident(val name: String) : AST()
+data class Ident(val name: String) : AST() {
+    override fun toString() = "[$name]"
+}
