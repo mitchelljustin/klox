@@ -124,7 +124,7 @@ class Interpreter {
             val callee: Callable
             try {
                 callee = eval(expr.target).into()
-            } catch (err: ClassCastException) {
+            } catch (err: Value.CastException) {
                 throw RuntimeError("callee must be a Callable", expr.target)
             }
             val callArity = expr.arguments.size
@@ -136,11 +136,16 @@ class Interpreter {
         }
         is Expr.Assignment -> {
             val target = expr.target.name
-            val value = eval(expr.value)
-            if (!ctx.assign(target, value))
-                throw RuntimeError("undefined variable '$target'", expr)
+            var newValue = eval(expr.value)
+            val operator = expr.operator
+            val undefinedVar = { throw RuntimeError("undefined variable '$target'", expr) }
+            if (operator.type != EQUAL) {
+                val oldValue = ctx.resolveSafe(target) ?: undefinedVar()
+                newValue = Value(applyBinaryOp(operator, newValue.into(), oldValue.into()))
+            }
+            if (!ctx.assign(target, newValue)) undefinedVar()
 
-            value
+            newValue
         }
         else -> throw RuntimeError("unknown expr type", expr)
     }
@@ -201,24 +206,27 @@ class Interpreter {
         val left: Double
         val right: Double
         try {
-            left = leftObj.inner as Double
-            right = rightObj.inner as Double
-        } catch (err: ClassCastException) {
-            throw RuntimeError("both lhs and rhs must be numbers for $operator", expr)
+            left = leftObj.into()
+            right = rightObj.into()
+        } catch (err: Value.CastException) {
+            throw RuntimeError("both lhs and rhs must be doubles for $operator", expr)
         }
         return Value(
-            when (operator.type) {
-                PLUS -> left + right
-                MINUS -> left - right
-                STAR -> left * right
-                SLASH -> left / right
-                GREATER -> left > right
-                GREATER_EQUAL -> left >= right
-                LESS -> left < right
-                LESS_EQUAL -> left <= right
-                else -> throw RuntimeError("unexpected operator for numbers", expr)
-            }
+            applyBinaryOp(operator, left, right)
+                ?: throw RuntimeError("unexpected operator for numbers", expr)
         )
+    }
+
+    private fun applyBinaryOp(operator: Token, left: Double, right: Double) = when (operator.type) {
+        PLUS, PLUS_EQUAL -> left + right
+        MINUS, MINUS_EQUAL -> left - right
+        STAR, STAR_EQUAL -> left * right
+        SLASH, SLASH_EQUAL -> left / right
+        GREATER -> left > right
+        GREATER_EQUAL -> left >= right
+        LESS -> left < right
+        LESS_EQUAL -> left <= right
+        else -> null
     }
 
 

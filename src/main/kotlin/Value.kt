@@ -1,4 +1,13 @@
 open class Value(val inner: Any?, val type: Type) {
+
+    class CastException(value: Value, targetType: String) :
+        TypeCastException(
+            when (value.inner) {
+                null -> "failed cast from null to $targetType"
+                else -> "failed cast from ${value::class.simpleName} to $targetType"
+            }
+        )
+
     enum class Type {
         String,
         Double,
@@ -46,8 +55,11 @@ open class Value(val inner: Any?, val type: Type) {
         }
     val isFalsy get() = !isTruthy
 
-    fun <T> map(f: (T) -> T): Value = Value(f(into()))
-    fun <T> into(): T = inner as T
+    inline fun <reified T> map(f: (T) -> T): Value = Value(f(into()))
+    inline fun <reified T> into(): T = when (inner) {
+        is T -> inner
+        else -> throw CastException(this, T::class.simpleName ?: "unknown")
+    }
 
     override operator fun equals(other: Any?) = when (other) {
         is Value -> type == other.type && inner == other.inner

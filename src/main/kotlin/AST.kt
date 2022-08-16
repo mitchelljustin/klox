@@ -42,7 +42,7 @@ open class Expr : AST() {
 
     data class Variable(val target: Ident) : Expr()
 
-    data class Assignment(val target: Ident, val value: Expr) : Expr()
+    data class Assignment(val target: Ident, val operator: Token, val value: Expr) : Expr()
 
     data class Call(val target: Expr, val arguments: List<Expr>) : Expr()
 
@@ -60,5 +60,5 @@ open class Expr : AST() {
 }
 
 data class Ident(val name: String) : AST() {
-    override fun toString() = "[$name]"
+    override fun toString() = "Ident($name)"
 }

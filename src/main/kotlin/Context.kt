@@ -7,6 +7,12 @@ class Context(val enclosing: Context? = null, val function: Callable.FunctionDef
     fun resolve(target: String): Value =
         binding.getOrElse(target) { enclosing?.resolve(target) } ?: throw NotFoundError(target)
 
+    fun resolveSafe(target: String): Value? = try {
+        resolve(target)
+    } catch (_: NotFoundError) {
+        null
+    }
+
     fun define(builtIn: Callable.BuiltIn) {
         define(builtIn.name, Value(builtIn))
     }

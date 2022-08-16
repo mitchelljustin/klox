@@ -1,7 +1,8 @@
 enum class TokenType(val match: String? = null) {
     LEFT_PAREN("("), RIGHT_PAREN(")"), LEFT_BRACE("{"), RIGHT_BRACE("}"),
-    COMMA(","), DOT("."),
-    MINUS("-"), PLUS("+"), SEMICOLON(";"), SLASH("/"), STAR("*"),
+    COMMA(","), DOT("."), SEMICOLON(";"),
+    MINUS("-"), PLUS("+"), SLASH("/"), STAR("*"),
+    MINUS_EQUAL("-="), PLUS_EQUAL("+="), SLASH_EQUAL("/="), STAR_EQUAL("*="),
 
     // One or two character tokens.
     BANG("!"), BANG_EQUAL("!="),
@@ -20,6 +21,10 @@ enum class TokenType(val match: String? = null) {
     BREAK(":break"),
 
     EOF;
+
+    companion object {
+        val Assignment = setOf(EQUAL, MINUS_EQUAL, PLUS_EQUAL, SLASH_EQUAL, STAR_EQUAL)
+    }
 
     val isKeyword: Boolean get() = match != null && match.length > 1 && match.startsWith(":")
     val first: Char? get() = match?.first()

@@ -121,11 +121,12 @@ class Parser(private val tokens: List<Token>) {
     private fun assignment(): Expr {
         val expr = or()
 
-        if (match(EQUAL)) {
+        if (match(TokenType.Assignment)) {
+            val operator = prevToken
             val value = assignment()
             if (expr !is Expr.Variable)
-                throw error("expected variable on lhs of '='")
-            return Expr.Assignment(expr.target, value)
+                throw error("expected variable on lhs of '$operator'")
+            return Expr.Assignment(expr.target, operator, value)
         }
 
         return expr
@@ -221,18 +222,18 @@ class Parser(private val tokens: List<Token>) {
         return prevToken
     }
 
-    private fun match(vararg types: TokenType): Boolean {
-        for (type in types) {
-            if (check(type)) {
-                advance()
-                return true
-            }
+    private fun match(vararg types: TokenType): Boolean = match(types.toSet())
+
+    private fun match(types: Set<TokenType>): Boolean = when (curToken.type) {
+        in types -> {
+            current++
+            true
         }
-        return false
+        else -> false
     }
 
     private fun consume(type: TokenType, message: String): Token {
-        if (!isAtEnd && check(type)) return advance()
+        if (check(type)) return advance()
         throw error(message)
     }
 

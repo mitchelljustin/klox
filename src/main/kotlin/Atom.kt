@@ -4,4 +4,6 @@ class Atom(val name: String) {
         is Atom -> name == other.name
         else -> false
     }
+
+    override fun hashCode() = name.hashCode()
 }
