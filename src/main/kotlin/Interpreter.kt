@@ -10,8 +10,8 @@ class Interpreter {
     private var ctx = global
 
     init {
-        global.define(Callable.BuiltIn("print") { value -> println(value) })
-        global.define(Callable.BuiltIn("readLine", ::readLine))
+        global.define(Callable.BuiltIn("print") { value -> println(value); Value.Null })
+        global.define(Callable.BuiltIn("readLine") { -> Value(readLine()) })
     }
 
     fun interpret(program: Program) = execSequence(program.stmts)
@@ -22,7 +22,7 @@ class Interpreter {
         } catch (ret: Return) {
             return ret.value
         }
-        return null
+        return Value.Null
     }
 
     private fun contextPush(function: Callable.FunctionDef? = null): Context {
@@ -39,12 +39,12 @@ class Interpreter {
     private fun exec(stmt: Stmt) {
         when (stmt) {
             is Stmt.VariableDecl -> {
-                val value = if (stmt.init != null) eval(stmt.init) else null
+                val value = if (stmt.init != null) eval(stmt.init) else Value.Null
                 val name = stmt.name.name
                 ctx.define(name, value)
             }
             is Stmt.FunctionDef -> {
-                ctx.define(stmt.name.name, Callable.FunctionDef(stmt))
+                ctx.define(stmt.name.name, Value(Callable.FunctionDef(stmt)))
             }
             is Stmt.If -> {
                 val condition = eval(stmt.condition)
@@ -77,12 +77,12 @@ class Interpreter {
 
     private fun eval(expr: Expr): Value = when (expr) {
         is Expr.Binary -> evalBinaryExpr(expr)
-        is Expr.Literal -> expr.value
+        is Expr.Literal -> Value(expr.value)
         is Expr.Unary -> evalUnaryExpr(expr)
         is Expr.Grouping -> eval(expr.expression)
         is Expr.Variable -> ctx.resolve(expr.target.name)
         is Expr.Call -> {
-            val callee = eval(expr.target)
+            val callee = eval(expr.target).inner
             if (callee !is Callable)
                 throw RuntimeError("callee must be callable", expr.target)
             val callArity = expr.arguments.size
@@ -90,7 +90,7 @@ class Interpreter {
                 throw RuntimeError("callee expected arity ${callee.arity}, got $callArity", expr)
             val arguments = expr.arguments.map(::eval)
             val result = doCall(callee, arguments)
-            toValue(result)
+            Value(result)
         }
         is Expr.Assignment -> {
             val target = expr.target.name
@@ -104,8 +104,7 @@ class Interpreter {
     }
 
     private fun doCall(callee: Callable, arguments: List<Value>): Value = when (callee) {
-        is Callable.BuiltIn ->
-            callee.call(arguments)
+        is Callable.BuiltIn -> Value(callee.call(arguments))
         is Callable.FunctionDef -> {
             val ctx = contextPush(function = callee)
             for ((param, arg) in callee.def.parameters.zip(arguments))
@@ -123,10 +122,10 @@ class Interpreter {
         val right = eval(expr.right)
         return when (expr.operator.type) {
             MINUS ->
-                if (right is Double) -right
+                if (right.type == VType.Double) Value(-(right.inner as Double))
                 else throw RuntimeError("rhs must be double for unary minus", expr)
             BANG ->
-                !isTruthy(right)
+                Value(!isTruthy(right))
             else -> throw RuntimeError("unexpected unary operator", expr)
         }
     }
@@ -138,12 +137,12 @@ class Interpreter {
         // handle special non-Double cases
         when (operator.type) {
             PLUS ->
-                if (leftObj is String && rightObj is String)
-                    return leftObj + rightObj
+                if (leftObj.isString && rightObj.isString)
+                    return Value((leftObj.inner as String) + (rightObj.inner as String))
             EQUAL_EQUAL ->
-                return isEqual(leftObj, rightObj)
+                return Value(isEqual(leftObj, rightObj))
             BANG_EQUAL ->
-                return !isEqual(leftObj, rightObj)
+                return Value(!isEqual(leftObj, rightObj))
             else -> {}
         }
         return evalBinaryExprDouble(expr, leftObj, rightObj)
@@ -154,34 +153,36 @@ class Interpreter {
         val left: Double
         val right: Double
         try {
-            left = leftObj as Double
-            right = rightObj as Double
+            left = leftObj.inner as Double
+            right = rightObj.inner as Double
         } catch (err: ClassCastException) {
             throw RuntimeError("both lhs and rhs must be numbers for $operator", expr)
         }
-        return when (operator.type) {
-            PLUS -> left + right
-            MINUS -> left - right
-            STAR -> left * right
-            SLASH -> left / right
-            GREATER -> left > right
-            GREATER_EQUAL -> left >= right
-            LESS -> left < right
-            LESS_EQUAL -> left <= right
-            else -> throw RuntimeError("unexpected operator for numbers", expr)
-        }
+        return Value(
+            when (operator.type) {
+                PLUS -> left + right
+                MINUS -> left - right
+                STAR -> left * right
+                SLASH -> left / right
+                GREATER -> left > right
+                GREATER_EQUAL -> left >= right
+                LESS -> left < right
+                LESS_EQUAL -> left <= right
+                else -> throw RuntimeError("unexpected operator for numbers", expr)
+            }
+        )
     }
 
-    private fun isTruthy(value: Value) = when (value) {
-        null -> false
-        is Boolean -> value
+    private fun isTruthy(value: Value) = when (value.type) {
+        VType.Null -> false
+        VType.Boolean -> value.inner as Boolean
         else -> true
     }
 
     private fun isEqual(a: Value, b: Value) = when {
-        a == null && b == null ->
+        a.isNull && b.isNull ->
             true
-        a == null ->
+        a.isNull ->
             false
         else ->
             a == b

@@ -7,10 +7,10 @@ class Context(val enclosing: Context? = null, val function: Callable.FunctionDef
         binding.getOrElse(target) { enclosing?.resolve(target) } ?: throw NotFoundError(target)
 
     fun define(builtIn: Callable.BuiltIn) {
-        define(builtIn.name, builtIn)
+        define(builtIn.name, Value(builtIn))
     }
 
-    fun define(name: String, init: Value = null): Value {
+    fun define(name: String, init: Value = Value.Null): Value {
         binding[name] = init
         return init
     }

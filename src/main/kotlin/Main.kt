@@ -30,7 +30,7 @@ class Lox {
             val line = readLine() ?: break
             try {
                 val result = runInterpreter(line, verbose = true)
-                if (result != null) println("=> $result")
+                if (!result.isNull) println("=> $result")
             } catch (err: Exception) {
                 System.err.println("${err::class.simpleName} $err\n")
             }
@@ -38,6 +38,7 @@ class Lox {
     }
 
     private fun runInterpreter(code: String, verbose: Boolean = false): Value {
+        if (code.trim().isEmpty()) return Value.Null
         val tokens = Scanner(code).scan()
         val expr = Parser(tokens).parse()
         if (verbose) println(expr.toString().lines().joinToString("\n") { "|| $it" })
