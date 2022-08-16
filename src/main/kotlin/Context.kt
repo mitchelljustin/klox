@@ -1,19 +1,20 @@
 class Context(
     val enclosing: Context? = null,
-    val function: Callable.FunctionDef? = null,
+    private val function: Callable.FunctionDef? = null,
 ) {
     class NotFoundError(target: String) : Exception("value not found: '$target'")
 
     private var binding = HashMap<String, Value>()
 
-    fun resolve(target: String): Value =
-        binding.getOrElse(target) { enclosing?.resolve(target) } ?: throw NotFoundError(target)
+    val enclosingFunction: Callable.FunctionDef?
+        get() = function ?: enclosing?.enclosingFunction
 
-    fun resolveSafe(target: String): Value? = try {
-        resolve(target)
-    } catch (_: NotFoundError) {
-        null
-    }
+    fun resolve(target: String): Value =
+        resolveSafe(target) ?: throw NotFoundError(target)
+
+    fun resolveSafe(target: String): Value? =
+        binding.getOrElse(target) { enclosing?.resolve(target) }
+
 
     fun define(builtIn: Callable.BuiltIn) {
         define(builtIn.name, Value(builtIn))

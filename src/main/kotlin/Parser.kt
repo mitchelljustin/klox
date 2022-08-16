@@ -17,8 +17,11 @@ class Parser(private val tokens: List<Token>) {
 
     private fun program(): Program {
         val stmts = ArrayList<Stmt>()
-        while (!isAtEnd)
+        while (!isAtEnd) {
+            if (match(SEMICOLON))
+                continue
             stmts.add(declaration())
+        }
         return Program(stmts)
     }
 
@@ -31,8 +34,8 @@ class Parser(private val tokens: List<Token>) {
     private fun variableDecl(): Stmt.VariableDecl {
         val name = ident(" to start variable declaration")
         val init = if (match(EQUAL)) expression() else null
-        consume(SEMICOLON, "expected ';' at end of let declaration")
-        return Stmt.VariableDecl(name, init)
+        val emitValue = !match(SEMICOLON)
+        return Stmt.VariableDecl(name, init, emitValue)
     }
 
     private fun functionDef(): Stmt.FunctionDef {
@@ -50,6 +53,7 @@ class Parser(private val tokens: List<Token>) {
             match(IF) -> ifStmt()
             match(FOR) -> forStmt()
             match(WHILE) -> whileStmt()
+            match(MATCH) -> matchStmt()
             else -> null
         }
         if (blockStmt != null)
@@ -64,6 +68,27 @@ class Parser(private val tokens: List<Token>) {
             return lineStmt
         }
         return exprStmt()
+    }
+
+    private fun matchStmt(): Stmt.Match {
+        val expr = expression()
+        consume(LEFT_CURLY, "expected '${LEFT_CURLY.match}' after match expression")
+        val clauses = commaList(::matchClause, "match clause", RIGHT_CURLY)
+        return Stmt.Match(expr, clauses)
+    }
+
+    private fun matchClause(): MatchClause {
+        val pattern = pattern()
+        consume(RIGHT_ARROW, "expected '${RIGHT_ARROW.match}' after match pattern")
+        val body = statement()
+        return MatchClause(pattern, body)
+    }
+
+    private fun pattern(): MatchPattern = when {
+        check(TokenType.Literals) -> MatchPattern.Literal(literal())
+        check(IDENTIFIER) -> MatchPattern.Anything(ident())
+        match(ELSE) -> MatchPattern.Anything(null)
+        else -> throw error("illegal match pattern")
     }
 
     private fun forStmt(): Stmt {
@@ -93,7 +118,7 @@ class Parser(private val tokens: List<Token>) {
         val variable = ident()
         consume(IN)
         val iterable = expression()
-        consume(LEFT_CURLY, "expected '{' after for..in clause")
+        consume(LEFT_CURLY, "expected '{' after for..in iterator")
         val body = block()
         return Stmt.ForIn(variable, iterable, body)
     }
@@ -229,18 +254,23 @@ class Parser(private val tokens: List<Token>) {
         return list
     }
 
-    private fun primary() = when {
+    private fun literal() = when {
         match(FALSE) -> Expr.Literal(false)
         match(TRUE) -> Expr.Literal(true)
         match(NIL) -> Expr.Literal(null)
         match(NUMBER, STRING) -> Expr.Literal(prevToken.literal)
         match(ATOM) -> Expr.Literal(Atom(prevToken.literal as String))
+        match(LEFT_SQUARE) -> Expr.Literal(commaList(::expression, "array item", RIGHT_SQUARE))
+        else -> throw error("expected literal")
+    }
+
+    private fun primary() = when {
+        check(TokenType.Literals) -> literal()
         match(LEFT_PAREN) -> {
             val expression = expression()
             consume(RIGHT_PAREN, "parentheses not balanced")
             Expr.Grouping(expression)
         }
-        match(LEFT_SQUARE) -> Expr.Literal(commaList(::expression, "array item", RIGHT_SQUARE))
         check(IDENTIFIER) -> Expr.Variable(ident())
         else -> throw error("expected primary expression")
     }
@@ -250,8 +280,10 @@ class Parser(private val tokens: List<Token>) {
         else throw error("expected identifier$where")
 
 
-    private fun check(type: TokenType, offset: Int = 0) =
-        !isAtEnd && tokens.getOrNull(current + offset)?.type == type
+    private fun check(type: TokenType, offset: Int = 0) = check(setOf(type), offset)
+
+    private fun check(types: Set<TokenType>, offset: Int = 0) =
+        !isAtEnd && tokens.getOrNull(current + offset)?.type in types
 
     private fun advance(): Token {
         if (!isAtEnd) current++

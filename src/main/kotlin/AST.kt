@@ -11,7 +11,7 @@ class Program(val stmts: List<Stmt>) : AST() {
     override fun toString() = "Program(${listToString(stmts)})"
 }
 
-open class Stmt : AST() {
+abstract class Stmt : AST() {
     class Block(val stmts: List<Stmt>) : Stmt() {
         override fun toString() = "Block(${listToString(stmts)})"
     }
@@ -32,12 +32,14 @@ open class Stmt : AST() {
 
     data class ForIn(val iterator: Ident, val iteratee: Expr, val body: Block) : Stmt()
 
-    data class VariableDecl(val name: Ident, val init: Expr?) : Stmt()
+    data class Match(val expr: Expr, val clauses: List<MatchClause>) : Stmt()
+
+    data class VariableDecl(val name: Ident, val init: Expr?, val emitValue: Boolean) : Stmt()
 
     data class FunctionDef(val name: Ident, val parameters: List<Ident>, val body: Block) : Stmt()
 }
 
-open class Expr : AST() {
+abstract class Expr : AST() {
     data class Binary(val left: Expr, val operator: Token, val right: Expr) : Expr()
 
     data class Grouping(val expression: Expr) : Expr()
@@ -65,4 +67,12 @@ open class Expr : AST() {
 
 data class Ident(val name: String) : AST() {
     override fun toString() = "Ident($name)"
+}
+
+
+data class MatchClause(val pattern: MatchPattern, val body: Stmt)
+
+abstract class MatchPattern : AST() {
+    data class Literal(val value: Expr.Literal) : MatchPattern()
+    data class Anything(val capture: Ident?) : MatchPattern()
 }

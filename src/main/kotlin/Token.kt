@@ -11,6 +11,9 @@ enum class TokenType(val match: String? = null) {
     GREATER(">"), GREATER_EQUAL(">="),
     LESS("<"), LESS_EQUAL("<="),
 
+    // Arrow
+    RIGHT_ARROW("->"),
+
     // Literals.
     IDENTIFIER, STRING, NUMBER, ATOM,
 
@@ -18,13 +21,14 @@ enum class TokenType(val match: String? = null) {
     AND(":and"), CLASS(":class"), ELSE(":else"), FALSE(":false"),
     FUN(":fun"), FOR(":for"), IF(":if"), NIL(":nil"), OR(":or"),
     RETURN(":return"), SUPER(":super"), THIS(":this"), TRUE(":true"),
-    LET(":let"), WHILE(":while"),
+    LET(":let"), WHILE(":while"), MATCH(":match"),
     BREAK(":break"), IN(":in"),
 
     EOF;
 
     companion object {
         val Assignment = setOf(EQUAL, MINUS_EQUAL, PLUS_EQUAL, SLASH_EQUAL, STAR_EQUAL)
+        val Literals = setOf(STRING, NUMBER, ATOM, NIL, TRUE, FALSE, LEFT_SQUARE)
     }
 
     val isKeyword: Boolean get() = match != null && match.length > 1 && match.startsWith(":")

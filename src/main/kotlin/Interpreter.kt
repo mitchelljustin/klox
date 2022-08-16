@@ -72,6 +72,7 @@ class Interpreter {
             is Stmt.If -> execIf(stmt)
             is Stmt.For -> execFor(stmt)
             is Stmt.ForIn -> execForIn(stmt)
+            is Stmt.Match -> execMatch(stmt)
             is Stmt.While -> execWhile(stmt)
             is Stmt.Break -> throw Break()
             is Stmt.Return -> execReturn(stmt)
@@ -80,6 +81,32 @@ class Interpreter {
                 throw RuntimeError("unknown stmt type", stmt)
         }
         return lastValue
+    }
+
+    private fun execMatch(stmt: Stmt.Match): Value {
+        val value = eval(stmt.expr)
+        for (clause in stmt.clauses) {
+            val ctx = matchesPattern(value, clause.pattern)
+            if (ctx != null) {
+                val result = exec(clause.body)
+                contextPop()
+                return result
+            }
+        }
+        // TODO: exhausted match?
+        return Value.Nil
+    }
+
+    private fun matchesPattern(value: Value, pattern: MatchPattern): Context? = when (pattern) {
+        is MatchPattern.Anything -> {
+            val ctx = contextPush()
+            if (pattern.capture != null)
+                ctx.define(pattern.capture.name, value)
+            ctx
+        }
+        is MatchPattern.Literal ->
+            if (value == eval(pattern.value)) contextPush() else null
+        else -> throw RuntimeError("unimplemented pattern type: ${pattern::class.simpleName}", pattern)
     }
 
     private fun execExprStmt(stmt: Stmt.ExprStmt): Value {
@@ -93,7 +120,7 @@ class Interpreter {
         val value = if (stmt.init != null) eval(stmt.init) else Value.Nil
         val name = stmt.name.name
         ctx.define(name, value)
-        return value
+        return if (stmt.emitValue) value else Value.Nil
     }
 
     private fun execIf(stmt: Stmt.If): Value {
@@ -123,7 +150,7 @@ class Interpreter {
     }
 
     private fun execReturn(stmt: Stmt.Return): Value {
-        if (ctx.function == null)
+        if (ctx.enclosingFunction == null)
             throw RuntimeError("returning outside of a function")
         val result = if (stmt.retVal == null) Value.Nil else eval(stmt.retVal)
         contextPop()
@@ -221,7 +248,7 @@ class Interpreter {
         val undefinedVar = { throw RuntimeError("undefined variable '$target'", expr) }
         if (operator.type != EQUAL) {
             val oldValue = ctx.resolveSafe(target) ?: undefinedVar()
-            newValue = Value(applyBinaryOp(operator, newValue.into(), oldValue.into()))
+            newValue = Value(applyBinaryOp(operator, oldValue.into(), newValue.into()))
         }
         if (!ctx.assign(target, newValue)) undefinedVar()
 

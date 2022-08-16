@@ -1,3 +1,5 @@
+import Atom as BareAtom
+
 open class Value(val inner: Any?, val type: Type) {
     class CastException(value: Value, targetType: String) :
         TypeCastException(
@@ -23,21 +25,20 @@ open class Value(val inner: Any?, val type: Type) {
         val True = Value(true)
 
         @Suppress("FunctionName")
-        fun Atom(name: String) = Value(name, Type.Atom)
+        fun Atom(name: String) = Value(BareAtom(name), Type.Atom)
     }
 
     constructor(inner: Any?) : this(
         when (inner) {
             is Value -> inner.inner
             is ArrayList<*> -> inner.map { Value(it) }
-            is Atom -> inner.name // intern the atom
             else -> inner
         },
         when (inner) {
             is String -> Type.String
             is Double -> Type.Double
             is Boolean -> Type.Boolean
-            is Atom -> Type.Atom
+            is BareAtom -> Type.Atom
             is Function<*>, is Callable -> Type.Callable
             is ArrayList<*> -> Type.List
             null, is Unit -> Type.Nil
