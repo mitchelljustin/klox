@@ -55,7 +55,7 @@ class Interpreter {
         is Stmt.If -> {
             val condition = eval(stmt.condition)
             when {
-                isTruthy(condition) ->
+                condition.isTruthy ->
                     exec(stmt.ifBody)
                 stmt.elseBody != null ->
                     exec(stmt.elseBody)
@@ -137,15 +137,21 @@ class Interpreter {
                 if (right.isDouble) right.map<Double> { -it }
                 else throw RuntimeError("rhs must be double for unary minus", expr)
             BANG ->
-                Value(!isTruthy(right))
+                Value(!right.isTruthy)
             else -> throw RuntimeError("unexpected unary operator", expr)
         }
     }
 
     private fun evalBinaryExpr(expr: Expr.Binary): Value {
-        val leftObj = eval(expr.left)
-        val rightObj = eval(expr.right)
         val operator = expr.operator
+        val leftObj = eval(expr.left)
+        val logicalResult = when (operator.type) {
+            AND -> if (leftObj.isFalsy) leftObj else eval(expr.right)
+            OR -> if (leftObj.isTruthy) leftObj else eval(expr.right)
+            else -> null
+        }
+        if (logicalResult != null) return logicalResult
+        val rightObj = eval(expr.right)
         // handle special non-Double cases
         when (operator.type) {
             PLUS ->
@@ -185,11 +191,6 @@ class Interpreter {
         )
     }
 
-    private fun isTruthy(value: Value): Boolean = when {
-        value.isNil -> false
-        value.isBoolean -> value.into()
-        else -> true
-    }
 
     private fun isEqual(a: Value, b: Value) = when {
         a.isNil && b.isNil ->

@@ -5,7 +5,7 @@ class Parser(private val tokens: List<Token>) {
         token: Token,
         message: String = "",
         where: String = "",
-    ) : Exception("[line ${token.line}$where] $message: $token")
+    ) : Exception("[line ${token.line}$where] $message, got $token")
 
     private var current = 0
 
@@ -49,11 +49,11 @@ class Parser(private val tokens: List<Token>) {
                 val condition = expression()
                 consume(RIGHT_PAREN, "expected ')' at end of condition")
                 consume(LEFT_BRACE, "expected if body to start with '{'")
-                val ifBody = block()
-                var elseBody: Stmt.Block? = null
+                val ifBody = statement()
+                var elseBody: Stmt? = null
                 if (match(ELSE)) {
                     consume(LEFT_BRACE, "expected else body to start with '{'")
-                    elseBody = block()
+                    elseBody = statement()
                 }
                 Stmt.If(condition, ifBody, elseBody)
             }
@@ -88,13 +88,13 @@ class Parser(private val tokens: List<Token>) {
         assignment()
 
     private fun assignment(): Expr {
-        val expr = equality()
+        val expr = or()
 
         if (match(EQUAL)) {
             val value = assignment()
-            if (expr is Expr.Variable)
-                return Expr.Assignment(expr.target, value)
-            throw error("expected variable on lhs of '='")
+            if (expr !is Expr.Variable)
+                throw error("expected variable on lhs of '='")
+            return Expr.Assignment(expr.target, value)
         }
 
         return expr
@@ -111,6 +111,12 @@ class Parser(private val tokens: List<Token>) {
 
         return expr
     }
+
+    private fun or() =
+        parseLeftAssoc(::and, OR)
+
+    private fun and() =
+        parseLeftAssoc(::equality, AND)
 
     private fun equality() =
         parseLeftAssoc(::comparison, EQUAL_EQUAL, BANG_EQUAL)

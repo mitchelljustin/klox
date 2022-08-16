@@ -20,7 +20,9 @@ open class Stmt : AST() {
 
     data class Return(val expr: Expr) : Stmt()
 
-    data class If(val condition: Expr, val ifBody: Block, val elseBody: Block?) : Stmt()
+    data class If(val condition: Expr, val ifBody: Stmt, val elseBody: Stmt?) : Stmt()
+
+    data class For(val init: Stmt, val condition: Expr, val update: Stmt) : Stmt()
 
     data class VariableDecl(val name: Ident, val init: Expr?) : Stmt()
 

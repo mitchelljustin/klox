@@ -9,6 +9,8 @@ class Value(val inner: Any?, val type: Type) {
 
     companion object {
         val Nil = Value(null, Type.Nil)
+        val False = Value(false, Type.Boolean)
+        val True = Value(true, Type.Boolean)
     }
 
     constructor(inner: Any?) : this(
@@ -32,6 +34,13 @@ class Value(val inner: Any?, val type: Type) {
     val isDouble get() = type == Type.Double
     val isBoolean get() = type == Type.Boolean
     val isCallable get() = type == Type.Callable
+    val isTruthy
+        get() = when {
+            isNil -> false
+            isBoolean -> into()
+            else -> true
+        }
+    val isFalsy get() = !isTruthy
 
     fun <T> map(f: (T) -> T): Value = Value(f(into()))
     fun <T> into(): T = inner as T
@@ -53,4 +62,6 @@ class Value(val inner: Any?, val type: Type) {
         result = 31 * result + type.hashCode()
         return result
     }
+
+
 }

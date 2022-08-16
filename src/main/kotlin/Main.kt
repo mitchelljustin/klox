@@ -41,7 +41,7 @@ class Lox {
         if (code.trim().isEmpty()) return Value.Nil
         val tokens = Scanner(code).scan()
         val expr = Parser(tokens).parse()
-//        println(expr.toString().lines().joinToString("\n") { "|| $it" })
+        println(expr.toString().lines().joinToString("\n") { "|| $it" })
         return interpreter.interpret(expr)
     }
 }
