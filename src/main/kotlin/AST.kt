@@ -26,6 +26,8 @@ open class Stmt : AST() {
 
     data class If(val condition: Expr, val ifBody: Block, val elseBody: Block?) : Stmt()
 
+    data class While(val condition: Expr, val body: Block) : Stmt()
+
     data class For(val init: Stmt?, val condition: Expr?, val update: Expr?, val body: Block) : Stmt()
 
     data class ForIn(val iterator: Ident, val iteratee: Expr, val body: Block) : Stmt()

@@ -49,6 +49,7 @@ class Parser(private val tokens: List<Token>) {
             match(LEFT_CURLY) -> block()
             match(IF) -> ifStmt()
             match(FOR) -> forStmt()
+            match(WHILE) -> whileStmt()
             else -> null
         }
         if (blockStmt != null)
@@ -92,9 +93,16 @@ class Parser(private val tokens: List<Token>) {
         val variable = ident()
         consume(IN)
         val iterable = expression()
-        consume(LEFT_CURLY, "expected '{' after for..in loop")
+        consume(LEFT_CURLY, "expected '{' after for..in clause")
         val body = block()
         return Stmt.ForIn(variable, iterable, body)
+    }
+
+    private fun whileStmt(): Stmt.While {
+        val condition = expression()
+        consume(LEFT_CURLY, "expected '{' after while condition")
+        val body = block()
+        return Stmt.While(condition, body)
     }
 
     private fun ifStmt(): Stmt.If {

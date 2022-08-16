@@ -39,7 +39,11 @@ class Interpreter {
         global.define(LastValue)
     }
 
-    fun interpret(program: Program) = execSequence(program.stmts)
+    fun interpret(program: Program) = try {
+        execSequence(program.stmts)
+    } catch (_: Break) {
+        throw RuntimeError("illegal break outside of loop")
+    }
 
     private fun execSequence(stmts: Iterable<Stmt>): Value =
         try {
@@ -47,8 +51,6 @@ class Interpreter {
             lastValue
         } catch (ret: Return) {
             ret.value
-        } catch (_: Break) {
-            throw RuntimeError("illegal break outside of loop")
         }
 
     private fun contextPush(function: Callable.FunctionDef? = null): Context {
@@ -64,110 +66,136 @@ class Interpreter {
 
     private fun exec(stmt: Stmt): Value {
         lastValue = when (stmt) {
-            is Stmt.Block -> execBlock(stmt, pushContext = true)
-            is Stmt.VariableDecl -> {
-                val value = if (stmt.init != null) eval(stmt.init) else Value.Nil
-                val name = stmt.name.name
-                ctx.define(name, value)
-                value
-            }
-            is Stmt.FunctionDef -> {
-                ctx.define(stmt.name.name, Value(Callable.FunctionDef(stmt)))
-            }
-            is Stmt.If -> {
-                val condition = eval(stmt.condition)
-                when {
-                    condition.isTruthy ->
-                        execBlock(stmt.ifBody, pushContext = true)
-                    stmt.elseBody != null ->
-                        execBlock(stmt.elseBody, pushContext = true)
-                    else -> Value.Nil
-                }
-            }
-            is Stmt.For -> {
-                contextPush()
-                if (stmt.init != null) exec(stmt.init)
-                while (stmt.condition == null || eval(stmt.condition).isTruthy) {
-                    try {
-                        execBlock(stmt.body, pushContext = false)
-                    } catch (_: Break) {
-                        break
-                    }
-                    if (stmt.update != null) eval(stmt.update)
-                }
-                contextPop()
-                Value.Nil
-            }
-            is Stmt.ForIn -> {
-                val ctx = contextPush()
-                val iterator = stmt.iterator.name
-                ctx.define(iterator)
-                val iteratee = eval(stmt.iteratee)
-                when (iteratee.type) {
-                    Value.Type.List -> {
-                        for (item in iteratee.into<List<Value>>()) {
-                            ctx.assign(iterator, item)
-                            try {
-                                execBlock(stmt.body, pushContext = false)
-                            } catch (_: Break) {
-                                break
-                            }
-                        }
-                    }
-                    else -> throw RuntimeError("unsupported loop iterator: ${iteratee.type}")
-                }
-                contextPop()
-                Value.Nil
-            }
-            is Stmt.Break -> {
-                throw Break()
-            }
-            is Stmt.Return -> {
-                if (ctx.function == null)
-                    throw RuntimeError("returning outside of a function")
-                val result = if (stmt.retVal == null) Value.Nil else eval(stmt.retVal)
-                contextPop()
-                throw Return(result)
-            }
-            is Stmt.ExprStmt -> {
-                val value = eval(stmt.expr)
-                if (stmt.emitValue) value else Value.Nil
-            }
+            is Stmt.Block -> execBlock(stmt)
+            is Stmt.VariableDecl -> execVariableDecl(stmt)
+            is Stmt.FunctionDef -> execFunctionDef(stmt)
+            is Stmt.If -> execIf(stmt)
+            is Stmt.For -> execFor(stmt)
+            is Stmt.ForIn -> execForIn(stmt)
+            is Stmt.While -> execWhile(stmt)
+            is Stmt.Break -> throw Break()
+            is Stmt.Return -> execReturn(stmt)
+            is Stmt.ExprStmt -> execExprStmt(stmt)
             else ->
                 throw RuntimeError("unknown stmt type", stmt)
         }
         return lastValue
     }
 
-    private fun execBlock(stmt: Stmt.Block, pushContext: Boolean): Value {
-        if (pushContext)
-            contextPush()
+    private fun execExprStmt(stmt: Stmt.ExprStmt): Value {
+        val value = eval(stmt.expr)
+        return if (stmt.emitValue) value else Value.Nil
+    }
+
+    private fun execFunctionDef(stmt: Stmt.FunctionDef) = ctx.define(stmt.name.name, Value(Callable.FunctionDef(stmt)))
+
+    private fun execVariableDecl(stmt: Stmt.VariableDecl): Value {
+        val value = if (stmt.init != null) eval(stmt.init) else Value.Nil
+        val name = stmt.name.name
+        ctx.define(name, value)
+        return value
+    }
+
+    private fun execIf(stmt: Stmt.If): Value {
+        val condition = eval(stmt.condition)
+        return when {
+            condition.isTruthy ->
+                execBlock(stmt.ifBody)
+            stmt.elseBody != null ->
+                execBlock(stmt.elseBody)
+            else -> Value.Nil
+        }
+    }
+
+    private fun execFor(stmt: Stmt.For): Value {
+        contextPush()
+        if (stmt.init != null) exec(stmt.init)
+        while (stmt.condition == null || eval(stmt.condition).isTruthy) {
+            try {
+                execBlock(stmt.body)
+            } catch (_: Break) {
+                break
+            }
+            if (stmt.update != null) eval(stmt.update)
+        }
+        contextPop()
+        return Value.Nil
+    }
+
+    private fun execReturn(stmt: Stmt.Return): Value {
+        if (ctx.function == null)
+            throw RuntimeError("returning outside of a function")
+        val result = if (stmt.retVal == null) Value.Nil else eval(stmt.retVal)
+        contextPop()
+        throw Return(result)
+        @Suppress("UNREACHABLE_CODE")
+        return Value.Nil
+    }
+
+    private fun execWhile(stmt: Stmt.While): Value {
+        while (eval(stmt.condition).isTruthy) {
+            try {
+                execBlock(stmt.body)
+            } catch (_: Break) {
+                break
+            }
+        }
+        return Value.Nil
+    }
+
+    private fun execForIn(stmt: Stmt.ForIn): Value {
+        val ctx = contextPush()
+        val iterator = stmt.iterator.name
+        ctx.define(iterator)
+        val iteratee = eval(stmt.iteratee)
+        when (iteratee.type) {
+            Value.Type.List -> {
+                for (item in iteratee.into<List<Value>>()) {
+                    ctx.assign(iterator, item)
+                    try {
+                        execBlock(stmt.body)
+                    } catch (_: Break) {
+                        break
+                    }
+                }
+            }
+            else -> throw RuntimeError("unsupported loop iterator: ${iteratee.type}")
+        }
+        contextPop()
+        return Value.Nil
+    }
+
+    private fun execBlock(stmt: Stmt.Block): Value {
+        contextPush()
         val result = execSequence(stmt.stmts)
-        if (pushContext)
-            contextPop()
+        contextPop()
         return result
     }
 
     private fun eval(expr: Expr): Value = when (expr) {
-        is Expr.Literal -> Value(when (val value = expr.value) {
-            is List<*> -> value.map { eval(it as Expr) }
-            else -> value
-        })
+        is Expr.Literal -> evalLiteral(expr)
         is Expr.Binary -> evalBinaryExpr(expr)
         is Expr.Unary -> evalUnaryExpr(expr)
         is Expr.Grouping -> eval(expr.expression)
-        is Expr.Variable -> ctx.resolve(expr.target.name)
+        is Expr.Variable -> evalVariable(expr)
         is Expr.Call -> evalCall(expr)
         is Expr.Assignment -> evalAssignment(expr)
         is Expr.Access -> evalAccess(expr)
         else -> throw RuntimeError("unknown expr type", expr)
     }
 
+    private fun evalVariable(expr: Expr.Variable) = ctx.resolve(expr.target.name)
+
+    private fun evalLiteral(expr: Expr.Literal) = Value(when (val value = expr.value) {
+        is List<*> -> value.map { eval(it as Expr) }
+        else -> value
+    })
+
     private fun evalAccess(expr: Expr.Access): Value {
         val target = eval(expr.target)
-        val field = expr.member.name
+        val member = expr.member.name
         return Value(
-            when (field) {
+            when (member) {
                 "string" -> Callable.Method(target, global.resolve("string").into())
                 "type" -> Callable.Method(target, global.resolve("type").into())
                 "add" -> {
@@ -181,7 +209,7 @@ class Interpreter {
                         }
                     )
                 }
-                else -> throw RuntimeError("no field or function '$field' on $target")
+                else -> throw RuntimeError("no member '$member' on $target")
             }
         )
     }
@@ -221,7 +249,7 @@ class Interpreter {
             val ctx = contextPush(function = callee)
             for ((param, arg) in callee.def.parameters.zip(arguments))
                 ctx.define(param.name, arg)
-            val result = execBlock(callee.def.body, pushContext = false)
+            val result = execBlock(callee.def.body)
             if (ctx === this.ctx) // implicit return at end of function call
                 contextPop()
             result
