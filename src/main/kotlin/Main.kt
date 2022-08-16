@@ -40,6 +40,7 @@ class Lox {
     private fun runInterpreter(code: String): Value {
         if (code.trim().isEmpty()) return Value.Nil
         val tokens = Scanner(code).scan()
+        println(tokens.joinToString(" "))
         val expr = Parser(tokens).parse()
         println(expr.toString().lines().joinToString("\n") { "|| $it" })
         return interpreter.interpret(expr)

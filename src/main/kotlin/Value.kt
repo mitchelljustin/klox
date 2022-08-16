@@ -1,11 +1,13 @@
-class Value(val inner: Any?, val type: Type) {
+open class Value(val inner: Any?, val type: Type) {
     enum class Type {
         String,
         Double,
         Boolean,
         Callable,
+        Atom,
         Nil,
     }
+
 
     companion object {
         val Nil = Value(null, Type.Nil)
@@ -22,6 +24,7 @@ class Value(val inner: Any?, val type: Type) {
             is String -> Type.String
             is Double -> Type.Double
             is Boolean -> Type.Boolean
+            is Atom -> Type.Atom
             is Function<*>, is Callable -> Type.Callable
             null, is Unit -> Type.Nil
             is Value -> inner.type
@@ -33,6 +36,7 @@ class Value(val inner: Any?, val type: Type) {
     val isString get() = type == Type.String
     val isDouble get() = type == Type.Double
     val isBoolean get() = type == Type.Boolean
+    val isAtom get() = type == Type.Atom
     val isCallable get() = type == Type.Callable
     val isTruthy
         get() = when {
@@ -53,8 +57,7 @@ class Value(val inner: Any?, val type: Type) {
     override fun toString() = when {
         inner is Double && inner - inner.toInt() == 0.0 ->
             inner.toInt().toString()
-        else ->
-            inner.toString()
+        else -> inner.toString()
     }
 
     override fun hashCode(): Int {

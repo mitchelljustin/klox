@@ -22,24 +22,16 @@ class Scanner(
         private val DIGITS = '0'..'9'
         private val ALPHA = listOf('a'..'z', 'A'..'Z', '_'..'_').flatten()
         private val ALPHANUM = listOf(DIGITS, ALPHA).flatten()
-        private val KEYWORDS = hashMapOf(
-            "and" to AND,
-            "class" to CLASS,
-            "else" to ELSE,
-            "false" to FALSE,
-            "for" to FOR,
-            "fun" to FUN,
-            "if" to IF,
-            "nil" to NIL,
-            "or" to OR,
-            "return" to RETURN,
-            "super" to SUPER,
-            "this" to THIS,
-            "true" to TRUE,
-            "let" to LET,
-            "while" to WHILE,
-            "break" to BREAK,
-        )
+        private val TOKENS = TokenType.values()
+        private val KEYWORDS = TOKENS
+            .filter(TokenType::isKeyword)
+            .associateBy { it.match?.substring(1) }
+        private val SYMBOL_DOUBLE = TOKENS
+            .filter { it.match?.length == 2 }
+            .groupBy { it.first }
+        private val SYMBOL_SINGLE = TOKENS
+            .filter { it.match?.length == 1 }
+            .associateBy { it.first }
     }
 
     fun scan(): List<Token> {
@@ -70,20 +62,6 @@ class Scanner(
 
     private fun scanToken() {
         when (val char = advance()) {
-            '(' -> addToken(LEFT_PAREN)
-            ')' -> addToken(RIGHT_PAREN)
-            '{' -> addToken(LEFT_BRACE)
-            '}' -> addToken(RIGHT_BRACE)
-            ',' -> addToken(COMMA)
-            '.' -> addToken(DOT)
-            '-' -> addToken(MINUS)
-            '+' -> addToken(PLUS)
-            ';' -> addToken(SEMICOLON)
-            '*' -> addToken(STAR)
-            '!' -> addToken(if (match('=')) BANG_EQUAL else BANG)
-            '=' -> addToken(if (match('=')) EQUAL_EQUAL else EQUAL)
-            '<' -> addToken(if (match('=')) LESS_EQUAL else LESS)
-            '>' -> addToken(if (match('=')) GREATER_EQUAL else GREATER)
             '/' -> {
                 if (match('/')) {
                     while (curChar != '\n' && !isAtEnd) advance()
@@ -91,11 +69,22 @@ class Scanner(
                     addToken(SLASH)
                 }
             }
-            ' ', '\r', '\t' -> {}
+            in SYMBOL_DOUBLE -> {
+                for (tokenType in SYMBOL_DOUBLE[char]!!)
+                    if (match(tokenType.second!!)) {
+                        addToken(tokenType)
+                        return
+                    }
+                addToken(SYMBOL_SINGLE[char]!!)
+            }
+            in SYMBOL_SINGLE ->
+                addToken(SYMBOL_SINGLE[char]!!)
+            in setOf(' ', '\r', '\t') -> {}
             '\n' -> line++
             '"' -> string()
             in DIGITS -> number()
             in ALPHA -> identifier()
+            ':' -> atom()
             else -> throw ScanError("unexpected char: '$char'", line)
         }
     }
@@ -131,6 +120,12 @@ class Scanner(
 
         val literal = source.slice(start + 1 until current - 1) // omit quotes
         addToken(STRING, literal)
+    }
+
+    private fun atom() {
+        while (curChar in ALPHANUM) advance()
+        val literal = source.slice(start + 1 until current) // omit colon
+        addToken(ATOM, literal)
     }
 
 }

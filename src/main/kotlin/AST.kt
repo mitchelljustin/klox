@@ -50,6 +50,7 @@ open class Expr : AST() {
         override fun toString() = when (value) {
             is String -> "\"$value\""
             is Double -> value.toString()
+            is Atom -> value.toString()
             true -> "true"
             false -> "false"
             null -> "null"

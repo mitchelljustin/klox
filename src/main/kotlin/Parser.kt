@@ -198,6 +198,7 @@ class Parser(private val tokens: List<Token>) {
         match(TRUE) -> Expr.Literal(true)
         match(NIL) -> Expr.Literal(null)
         match(NUMBER, STRING) -> Expr.Literal(prevToken.literal)
+        match(ATOM) -> Expr.Literal(Atom(prevToken.literal as String))
         match(LEFT_PAREN) -> {
             val expression = expression()
             consume(RIGHT_PAREN, "parentheses not balanced")
