@@ -35,12 +35,15 @@ class Interpreter {
 
     fun interpret(program: Program) = execSequence(program.stmts)
 
-    private fun execSequence(stmts: Iterable<Stmt>): Value = try {
-        stmts.forEach(::exec)
-        lastValue
-    } catch (ret: Return) {
-        ret.value
-    }
+    private fun execSequence(stmts: Iterable<Stmt>): Value =
+        try {
+            stmts.forEach(::exec)
+            lastValue
+        } catch (ret: Return) {
+            ret.value
+        } catch (_: Break) {
+            throw RuntimeError("illegal break outside of loop")
+        }
 
     private fun contextPush(function: Callable.FunctionDef? = null): Context {
         ctx = Context(ctx, function)
@@ -88,6 +91,27 @@ class Interpreter {
                 }
                 Value.Nil
             }
+            is Stmt.ForIn -> {
+                contextPush()
+                val iterator = stmt.iterator.name
+                ctx.define(iterator)
+                val iteratee = eval(stmt.iteratee)
+                when {
+                    iteratee.isList -> {
+                        for (item in iteratee.into<List<Value>>()) {
+                            ctx.assign(iterator, item)
+                            try {
+                                exec(stmt.body)
+                            } catch (_: Break) {
+                                break
+                            }
+                        }
+                    }
+                    else -> throw RuntimeError("unsupported loop iterator: $iteratee (${iteratee.type})")
+                }
+                contextPop()
+                Value.Nil
+            }
             is Stmt.Break -> {
                 throw Break()
             }
@@ -116,7 +140,10 @@ class Interpreter {
 
     private fun eval(expr: Expr): Value = when (expr) {
         is Expr.Binary -> evalBinaryExpr(expr)
-        is Expr.Literal -> Value(expr.value)
+        is Expr.Literal -> Value(when (val value = expr.value) {
+            is List<*> -> value.map { eval(it as Expr) }
+            else -> value
+        })
         is Expr.Unary -> evalUnaryExpr(expr)
         is Expr.Grouping -> eval(expr.expression)
         is Expr.Variable -> ctx.resolve(expr.target.name)

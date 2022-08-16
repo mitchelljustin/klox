@@ -14,6 +14,7 @@ open class Value(val inner: Any?, val type: Type) {
         Boolean,
         Callable,
         Atom,
+        List,
         Nil,
     }
 
@@ -27,6 +28,7 @@ open class Value(val inner: Any?, val type: Type) {
     constructor(inner: Any?) : this(
         when (inner) {
             is Value -> inner.inner
+            is List<*> -> inner.map { Value(it) }
             else -> inner
         },
         when (inner) {
@@ -35,6 +37,7 @@ open class Value(val inner: Any?, val type: Type) {
             is Boolean -> Type.Boolean
             is Atom -> Type.Atom
             is Function<*>, is Callable -> Type.Callable
+            is List<*> -> Type.List
             null, is Unit -> Type.Nil
             is Value -> inner.type
             else -> throw Exception("cannot convert to Lox value: $inner")
@@ -43,6 +46,7 @@ open class Value(val inner: Any?, val type: Type) {
 
     val isNil get() = type == Type.Nil
     val isString get() = type == Type.String
+    val isList get() = type == Type.List
     val isDouble get() = type == Type.Double
     val isBoolean get() = type == Type.Boolean
     val isAtom get() = type == Type.Atom

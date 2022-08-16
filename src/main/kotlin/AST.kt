@@ -28,6 +28,8 @@ open class Stmt : AST() {
 
     data class For(val init: Stmt?, val condition: Expr?, val update: Expr?, val body: Stmt) : Stmt()
 
+    data class ForIn(val iterator: Ident, val iteratee: Expr, val body: Stmt) : Stmt()
+
     data class VariableDecl(val name: Ident, val init: Expr?) : Stmt()
 
     data class FunctionDef(val name: Ident, val parameters: List<Ident>, val body: Block) : Stmt()
@@ -49,11 +51,7 @@ open class Expr : AST() {
     class Literal(val value: Any?) : Expr() {
         override fun toString() = when (value) {
             is String -> "\"$value\""
-            is Double -> value.toString()
-            is Atom -> value.toString()
-            true -> "true"
-            false -> "false"
-            null -> "null"
+            is Double, is Atom, is List<*>, true, false, null -> value.toString()
             else -> "?"
         }
     }

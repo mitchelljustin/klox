@@ -1,5 +1,6 @@
 enum class TokenType(val match: String? = null) {
-    LEFT_PAREN("("), RIGHT_PAREN(")"), LEFT_BRACE("{"), RIGHT_BRACE("}"),
+    LEFT_PAREN("("), RIGHT_PAREN(")"), LEFT_CURLY("{"), RIGHT_CURLY("}"),
+    LEFT_SQUARE("["), RIGHT_SQUARE("]"),
     COMMA(","), DOT("."), SEMICOLON(";"),
     MINUS("-"), PLUS("+"), SLASH("/"), STAR("*"),
     MINUS_EQUAL("-="), PLUS_EQUAL("+="), SLASH_EQUAL("/="), STAR_EQUAL("*="),
@@ -18,7 +19,7 @@ enum class TokenType(val match: String? = null) {
     FUN(":fun"), FOR(":for"), IF(":if"), NIL(":nil"), OR(":or"),
     RETURN(":return"), SUPER(":super"), THIS(":this"), TRUE(":true"),
     LET(":let"), WHILE(":while"),
-    BREAK(":break"),
+    BREAK(":break"), IN(":in"),
 
     EOF;
 

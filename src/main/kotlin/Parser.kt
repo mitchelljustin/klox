@@ -29,7 +29,7 @@ class Parser(private val tokens: List<Token>) {
     }
 
     private fun variableDecl(): Stmt.VariableDecl {
-        val name = ident(" after keyword 'let'")
+        val name = ident(" to start variable declaration")
         val init = if (match(EQUAL)) expression() else null
         consume(SEMICOLON, "expected ';' at end of let declaration")
         return Stmt.VariableDecl(name, init)
@@ -38,15 +38,15 @@ class Parser(private val tokens: List<Token>) {
     private fun functionDef(): Stmt.FunctionDef {
         val name = ident(" after keyword 'fun'")
         consume(LEFT_PAREN, "expected '(' after function name")
-        val parameters = parenCommaList(::ident, "parameter")
-        consume(LEFT_BRACE, "expected '{' after function signature")
+        val parameters = commaList(::ident, "parameter", RIGHT_PAREN)
+        consume(LEFT_CURLY, "expected '{' after function signature")
         val body = block()
         return Stmt.FunctionDef(name, parameters, body)
     }
 
     private fun statement(): Stmt {
         val blockStmt = when {
-            match(LEFT_BRACE) -> block()
+            match(LEFT_CURLY) -> block()
             match(IF) -> ifStmt()
             match(FOR) -> forStmt()
             else -> null
@@ -65,54 +65,68 @@ class Parser(private val tokens: List<Token>) {
         return exprStmt()
     }
 
-    private fun forStmt(): Stmt.For {
-        consume(LEFT_PAREN, "expected '(' after 'for'")
+    private fun forStmt(): Stmt {
+        if (check(IDENTIFIER) && check(IN, offset = 1))
+            return forInStmt()
         val init = when {
+            check(LEFT_CURLY) -> null
             match(SEMICOLON) -> null
             match(LET) -> variableDecl()
-            else -> {
-                val expr = exprStmt()
-                if (expr.emitValue)
-                    throw error("expected ';' after initializer expr")
-                expr
-            }
+            else -> exprStmt(noEmitError = "expected ';' after for init clause")
         }
         val condition = when {
-            check(SEMICOLON) -> null
-            else -> expression()
+            check(LEFT_CURLY) -> null
+            match(SEMICOLON) -> null
+            else -> exprStmt(noEmitError = "expected ';' after for condition clause").expr
         }
-        consume(SEMICOLON, "expected ';' after condition")
         val update = when {
-            check(RIGHT_PAREN) -> null
+            check(LEFT_CURLY) -> null
             else -> expression()
         }
-        consume(RIGHT_PAREN, "expected ')' after for clauses")
-        val body = statement()
+        consume(LEFT_CURLY, "expected '{' after for clauses")
+        val body = block()
         return Stmt.For(init, condition, update, body)
     }
 
+    private fun forInStmt(): Stmt.ForIn {
+        val variable = ident()
+        consume(IN)
+        val iterable = expression()
+        consume(LEFT_CURLY, "expected '{' after for..in loop")
+        val body = block()
+        return Stmt.ForIn(variable, iterable, body)
+    }
+
     private fun ifStmt(): Stmt.If {
-        consume(LEFT_PAREN, "expected '(' after 'if'")
         val condition = expression()
-        consume(RIGHT_PAREN, "expected ')' at end of condition")
-        val ifBody = statement()
+        consume(LEFT_CURLY, "expected '{' after if-condition")
+        val ifBody = block()
         var elseBody: Stmt? = null
         if (match(ELSE)) {
-            elseBody = statement()
+            consume(LEFT_CURLY, "expected '{' after else")
+            elseBody = block()
         }
         return Stmt.If(condition, ifBody, elseBody)
     }
 
     private fun block(): Stmt.Block {
         val stmts = ArrayList<Stmt>()
-        while (!check(RIGHT_BRACE) && !isAtEnd)
+        while (!check(RIGHT_CURLY) && !isAtEnd)
             stmts.add(declaration())
-        consume(RIGHT_BRACE, "expected '}' after block")
+        consume(RIGHT_CURLY, "expected '}' after block")
         return Stmt.Block(stmts)
     }
 
-    private fun exprStmt() =
-        Stmt.ExprStmt(expression(), emitValue = !match(SEMICOLON))
+    private fun exprStmt(noEmitError: String? = null) =
+        Stmt.ExprStmt(
+            expression(), emitValue = when (noEmitError) {
+                null -> !match(SEMICOLON)
+                else -> {
+                    consume(SEMICOLON, noEmitError)
+                    false
+                }
+            }
+        )
 
 
     private fun expression() =
@@ -176,21 +190,22 @@ class Parser(private val tokens: List<Token>) {
         val expr = primary()
 
         if (match(LEFT_PAREN)) {
-            val arguments = parenCommaList(::expression, "argument")
+            val arguments = commaList(::expression, "argument", RIGHT_PAREN)
             return Expr.Call(expr, arguments)
         }
 
         return expr
     }
 
-    private fun <T> parenCommaList(paramFn: () -> T, kind: String): ArrayList<T> {
+    private fun <T> commaList(paramFn: () -> T, kind: String, ender: TokenType): ArrayList<T> {
         val list = ArrayList<T>()
-        while (!match(RIGHT_PAREN)) {
+        while (!match(ender)) {
             val item = paramFn()
             list.add(item)
-            if (!check(RIGHT_PAREN))
+            if (!check(ender))
                 consume(COMMA, "expected ',' after $kind")
         }
+        match(COMMA) // optional trailing comma
         return list
     }
 
@@ -205,6 +220,7 @@ class Parser(private val tokens: List<Token>) {
             consume(RIGHT_PAREN, "parentheses not balanced")
             Expr.Grouping(expression)
         }
+        match(LEFT_SQUARE) -> Expr.Literal(commaList(::expression, "array item", RIGHT_SQUARE))
         check(IDENTIFIER) -> Expr.Variable(ident())
         else -> throw error("expected primary expression")
     }
@@ -214,8 +230,8 @@ class Parser(private val tokens: List<Token>) {
         else throw error("expected identifier$where")
 
 
-    private fun check(type: TokenType) =
-        !isAtEnd && curToken.type == type
+    private fun check(type: TokenType, offset: Int = 0) =
+        !isAtEnd && tokens.getOrNull(current + offset)?.type == type
 
     private fun advance(): Token {
         if (!isAtEnd) current++
@@ -232,9 +248,9 @@ class Parser(private val tokens: List<Token>) {
         else -> false
     }
 
-    private fun consume(type: TokenType, message: String): Token {
+    private fun consume(type: TokenType, message: String? = null): Token {
         if (check(type)) return advance()
-        throw error(message)
+        throw error(message ?: "")
     }
 
     private fun error(message: String): ParseError {
