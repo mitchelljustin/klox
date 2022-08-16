@@ -1,21 +1,26 @@
 abstract class AST {
     companion object {
-        fun listToString(list: List<AST>) = list.joinToString("\n") { "  $it," }
+        fun listToString(list: List<AST>) = when {
+            list.isEmpty() -> ""
+            else -> "\n" + list.joinToString("\n") { "  $it," }
+        }
     }
 }
 
 class Program(val stmts: List<Stmt>) : AST() {
-    override fun toString() = "Program(\n${listToString(stmts)}\n)"
+    override fun toString() = "Program(${listToString(stmts)})"
 }
 
 open class Stmt : AST() {
     class Block(val stmts: List<Stmt>) : Stmt() {
-        override fun toString() = "Block(\n${listToString(stmts)}\n)"
+        override fun toString() = "Block(${listToString(stmts)})"
     }
 
     data class ExprStmt(val expr: Expr) : Stmt()
 
-    data class VariableDecl(val target: Ident, val init: Expr?) : Stmt()
+    data class VariableDecl(val name: Ident, val init: Expr?) : Stmt()
+
+    data class FunctionDecl(val name: Ident, val parameters: List<Ident>, val body: Block) : Stmt()
 }
 
 open class Expr : AST() {

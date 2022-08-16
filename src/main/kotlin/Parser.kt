@@ -65,10 +65,18 @@ class Parser(private val tokens: List<Token>) {
 
     private fun declaration(): Stmt = when {
         match(LET) -> {
-            val name = consume(IDENTIFIER, "expected identifier after 'var'")
+            val name = ident(" after keyword 'let'")
             val init = if (match(EQUAL)) expression() else null
             consume(SEMICOLON, "expected semicolon at end of stmt")
-            Stmt.VariableDecl(Ident(name.lexeme), init)
+            Stmt.VariableDecl(name, init)
+        }
+        match(FUN) -> {
+            val name = ident(" after keyword 'fun'")
+            consume(LEFT_PAREN, "expected '(' after function name")
+            val parameters = parenCommaList(::ident, "parameter")
+            consume(LEFT_BRACE, "expected '{' after function signature")
+            val body = block()
+            Stmt.FunctionDecl(name, parameters, body)
         }
         else -> statement()
     }
@@ -147,17 +155,22 @@ class Parser(private val tokens: List<Token>) {
         val expr = primary()
 
         if (match(LEFT_PAREN)) {
-            val arguments = ArrayList<Expr>()
-            while (!match(RIGHT_PAREN)) {
-                val argument = expression()
-                arguments.add(argument)
-                if (!check(RIGHT_PAREN))
-                    consume(COMMA, "expected ',' after argument")
-            }
+            val arguments = parenCommaList(::expression, "argument")
             return Expr.Call(expr, arguments)
         }
 
         return expr
+    }
+
+    private fun <T> parenCommaList(paramFn: () -> T, kind: String): ArrayList<T> {
+        val list = ArrayList<T>()
+        while (!match(RIGHT_PAREN)) {
+            val item = paramFn()
+            list.add(item)
+            if (!check(RIGHT_PAREN))
+                consume(COMMA, "expected ',' after $kind")
+        }
+        return list
     }
 
     private fun primary() = when {
@@ -170,8 +183,12 @@ class Parser(private val tokens: List<Token>) {
             consume(RIGHT_PAREN, "parentheses not balanced")
             Expr.Grouping(expression)
         }
-        match(IDENTIFIER) -> Expr.Variable(Ident(prevToken.lexeme))
+        check(IDENTIFIER) -> Expr.Variable(ident())
         else -> throw error("expected expression")
     }
+
+    private fun ident(where: String? = null) =
+        if (match(IDENTIFIER)) Ident(prevToken.lexeme)
+        else throw error("expected identifier$where")
 
 }

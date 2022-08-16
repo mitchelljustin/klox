@@ -2,15 +2,14 @@ import TokenType.*
 
 class Interpreter {
 
-    class RuntimeError(message: String, ast: AST? = null) :
-        kotlin.Exception("$message ${ast ?: ""}")
+    class RuntimeError(message: String, ast: AST? = null) : Exception("$message ${ast ?: ""}")
 
-    private val global = Environment()
-    private var environment = global
+    private val global = Context()
+    private var ctx = global
 
     init {
-        global.define("print", Callable.lambda { value -> println(value) })
-        global.define("readLine", Callable.lambda(::readLine))
+        global.defineFun("print", Callable.BuiltIn { value -> println(value) })
+        global.defineFun("readLine", Callable.BuiltIn(::readLine))
     }
 
     fun interpret(program: Program) = execStmts(program.stmts)
@@ -23,26 +22,35 @@ class Interpreter {
         return lastValue
     }
 
-    private fun scopePush() {
-        environment = Environment(environment)
+    private fun contextPush() {
+        ctx = Context(ctx)
     }
 
-    private fun scopePop() {
-        if (environment === global) throw RuntimeError("cannot pop global scope")
-        environment = environment.parent!!
+    private fun contextPop() {
+        if (ctx === global) throw RuntimeError("cannot pop global ctx")
+        ctx = ctx.enclosing!!
     }
 
     private fun exec(stmt: Stmt): Value = when (stmt) {
         is Stmt.VariableDecl -> {
             val value = if (stmt.init != null) eval(stmt.init) else null
-            val target = stmt.target.name
-            environment.define(target, value)
+            val target = stmt.name.name
+            ctx.defineVar(target, value)
             value
         }
+        is Stmt.FunctionDecl -> {
+            ctx.defineFun(
+                stmt.name.name,
+                Callable.FunctionDef(
+                    parameters = stmt.parameters.map { it.name },
+                    body = stmt.body,
+                )
+            )
+        }
         is Stmt.Block -> {
-            scopePush()
+            contextPush()
             val result = execStmts(stmt.stmts)
-            scopePop()
+            contextPop()
             result
         }
         is Stmt.ExprStmt -> eval(stmt.expr)
@@ -54,7 +62,7 @@ class Interpreter {
         is Expr.Literal -> expr.value
         is Expr.Unary -> evalUnaryExpr(expr)
         is Expr.Grouping -> eval(expr.expression)
-        is Expr.Variable -> environment.resolve(expr.target.name)
+        is Expr.Variable -> ctx.resolve(expr.target.name)
         is Expr.Call -> {
             val callee = eval(expr.target)
             if (callee !is Callable)
@@ -62,19 +70,33 @@ class Interpreter {
             val callArity = expr.arguments.count()
             if (callee.arity != callArity)
                 throw RuntimeError("call has the wrong arity: $callArity != ${callee.arity}", expr)
-            val arguments = expr.arguments.map(::eval).toTypedArray()
-            val result = callee.call(*arguments)
+            val arguments = expr.arguments.map(::eval)
+            val result = doCall(callee, arguments)
             toValue(result)
         }
         is Expr.Assignment -> {
             val target = expr.target.name
             val value = eval(expr.value)
-            if (!environment.assign(target, value))
+            if (!ctx.assign(target, value))
                 throw RuntimeError("undefined variable '$target'", expr)
 
             value
         }
         else -> throw RuntimeError("unknown expr type", expr)
+    }
+
+    private fun doCall(callee: Callable, arguments: List<Value>): Value = when (callee) {
+        is Callable.BuiltIn -> callee.call(arguments)
+        is Callable.FunctionDef -> {
+            contextPush()
+            for ((param, arg) in callee.parameters.zip(arguments)) {
+                ctx.defineVar(param, arg)
+            }
+            val result = execStmts(callee.body.stmts)
+            contextPop()
+            result
+        }
+        else -> throw RuntimeError("unsupported Callable $callee")
     }
 
     private fun evalUnaryExpr(expr: Expr.Unary): Value {
