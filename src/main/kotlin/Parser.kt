@@ -83,9 +83,27 @@ class Parser(private val tokens: List<Token>) {
     }
 
     private fun statement(): Stmt {
-        val stmt = when {
+        val blockStmt = when {
             match(LEFT_BRACE) ->
-                return block()
+                block()
+            match(IF) -> {
+                consume(LEFT_PAREN, "expected '(' after 'if'")
+                val condition = expression()
+                consume(RIGHT_PAREN, "expected ')' at end of condition")
+                consume(LEFT_BRACE, "expected if body to start with '{'")
+                val ifBody = block()
+                var elseBody: Stmt.Block? = null
+                if (match(ELSE)) {
+                    consume(LEFT_BRACE, "expected else body to start with '{'")
+                    elseBody = block()
+                }
+                Stmt.If(condition, ifBody, elseBody)
+            }
+            else -> null
+        }
+        if (blockStmt != null)
+            return blockStmt
+        val stmt = when {
             match(RETURN) ->
                 Stmt.Return(expression())
             else ->

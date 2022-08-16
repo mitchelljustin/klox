@@ -39,9 +39,8 @@ class Lox {
 
     private fun runInterpreter(code: String, verbose: Boolean = false): Value {
         val tokens = Scanner(code).scan()
-        if (verbose) println(tokens.joinToString(", "))
         val expr = Parser(tokens).parse()
-        if (verbose) println(expr)
+        if (verbose) println(expr.toString().lines().joinToString("\n") { "|| $it" })
         return interpreter.interpret(expr)
     }
 }

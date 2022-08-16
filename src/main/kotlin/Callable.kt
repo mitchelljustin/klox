@@ -3,16 +3,19 @@ interface Callable {
 
     data class BuiltIn(
         override val arity: Int,
+        val name: String,
         val call: (List<Value>) -> Value,
     ) : Callable {
-        constructor(f: () -> Value) :
-                this(0, { f() })
+        constructor(name: String, f: () -> Value) :
+                this(arity = 0, name, { f() })
 
-        constructor(f: (Value) -> Value) :
-                this(1, { (a) -> f(a) })
+        constructor(name: String, f: (Value) -> Value) :
+                this(arity = 1, name, { (a) -> f(a) })
 
-        constructor(f: (Value, Value) -> Value) :
-                this(2, { (a, b) -> f(a, b) })
+        constructor(name: String, f: (Value, Value) -> Value) :
+                this(arity = 2, name, { (a, b) -> f(a, b) })
+
+        override fun toString() = "builtin:$name/$arity"
     }
 
     data class FunctionDef(val def: Stmt.FunctionDef) : Callable {

@@ -4,26 +4,25 @@ class Interpreter {
 
     class RuntimeError(message: String, ast: AST? = null) : Exception("$message ${ast ?: ""}")
 
-    private data class StmtResult(val value: Value, val escape: Boolean = false)
+    class Return(val value: Value) : Exception()
 
     private val global = Context()
     private var ctx = global
 
     init {
-        global.define("print", Callable.BuiltIn { value -> println(value) })
-        global.define("readLine", Callable.BuiltIn(::readLine))
+        global.define(Callable.BuiltIn("print") { value -> println(value) })
+        global.define(Callable.BuiltIn("readLine", ::readLine))
     }
 
     fun interpret(program: Program) = execSequence(program.stmts)
 
     private fun execSequence(stmts: Iterable<Stmt>): Value {
-        var lastValue: Value = null
-        for (stmt in stmts) {
-            val (value, escape) = exec(stmt)
-            lastValue = value
-            if (escape) break
+        try {
+            stmts.forEach(::exec)
+        } catch (ret: Return) {
+            return ret.value
         }
-        return lastValue
+        return null
     }
 
     private fun contextPush(function: Callable.FunctionDef? = null): Context {
@@ -37,34 +36,43 @@ class Interpreter {
         ctx = ctx.enclosing!!
     }
 
-    private fun exec(stmt: Stmt): StmtResult = when (stmt) {
-        is Stmt.VariableDecl -> {
-            val value = if (stmt.init != null) eval(stmt.init) else null
-            val name = stmt.name.name
-            ctx.define(name, value)
-            StmtResult(value)
+    private fun exec(stmt: Stmt) {
+        when (stmt) {
+            is Stmt.VariableDecl -> {
+                val value = if (stmt.init != null) eval(stmt.init) else null
+                val name = stmt.name.name
+                ctx.define(name, value)
+            }
+            is Stmt.FunctionDef -> {
+                ctx.define(stmt.name.name, Callable.FunctionDef(stmt))
+            }
+            is Stmt.If -> {
+                val condition = eval(stmt.condition)
+                when {
+                    isTruthy(condition) ->
+                        exec(stmt.ifBody)
+                    stmt.elseBody != null ->
+                        exec(stmt.elseBody)
+                    else -> {}
+                }
+            }
+            is Stmt.Return -> {
+                if (ctx.function == null)
+                    throw RuntimeError("returning outside of a function")
+                val result = eval(stmt.expr)
+                contextPop()
+                throw Return(result)
+            }
+            is Stmt.Block -> {
+                contextPush()
+                execSequence(stmt.stmts)
+                contextPop()
+            }
+            is Stmt.ExprStmt ->
+                eval(stmt.expr)
+            else ->
+                throw RuntimeError("unknown stmt type", stmt)
         }
-        is Stmt.FunctionDef -> {
-            val func = ctx.define(stmt.name.name, Callable.FunctionDef(stmt))
-            StmtResult(func)
-        }
-        is Stmt.Return -> {
-            if (ctx.function == null)
-                throw RuntimeError("returning outside of a function")
-            val result = eval(stmt.expr)
-            contextPop()
-            StmtResult(result, escape = true)
-        }
-        is Stmt.Block -> {
-            contextPush()
-            val result = execSequence(stmt.stmts)
-            contextPop()
-            StmtResult(result)
-        }
-        is Stmt.ExprStmt ->
-            StmtResult(eval(stmt.expr))
-        else ->
-            throw RuntimeError("unknown stmt type", stmt)
     }
 
     private fun eval(expr: Expr): Value = when (expr) {
@@ -77,9 +85,9 @@ class Interpreter {
             val callee = eval(expr.target)
             if (callee !is Callable)
                 throw RuntimeError("callee must be callable", expr.target)
-            val callArity = expr.arguments.count()
+            val callArity = expr.arguments.size
             if (callee.arity != callArity)
-                throw RuntimeError("call has the wrong arity: $callArity != ${callee.arity}", expr)
+                throw RuntimeError("callee expected arity ${callee.arity}, got $callArity", expr)
             val arguments = expr.arguments.map(::eval)
             val result = doCall(callee, arguments)
             toValue(result)

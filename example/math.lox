@@ -1,0 +1,9 @@
+fun square(a) {
+    return a * a;
+}
+
+fun squareIfPositive(a) {
+
+}
+
+print(square(99));
