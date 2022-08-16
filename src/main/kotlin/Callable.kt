@@ -15,12 +15,11 @@ interface Callable {
                 this(2, { (a, b) -> f(a, b) })
     }
 
-    data class FunctionDef(
-        val parameters: List<String>,
-        val body: Stmt.Block
-    ) : Callable {
+    data class FunctionDef(val def: Stmt.FunctionDef) : Callable {
         override val arity: Int
-            get() = parameters.size
+            get() = def.parameters.size
+
+        override fun toString() = "${def.name.name}/$arity"
     }
 }
 

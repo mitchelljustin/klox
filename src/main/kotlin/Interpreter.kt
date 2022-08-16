@@ -4,57 +4,67 @@ class Interpreter {
 
     class RuntimeError(message: String, ast: AST? = null) : Exception("$message ${ast ?: ""}")
 
+    private data class StmtResult(val value: Value, val escape: Boolean = false)
+
     private val global = Context()
     private var ctx = global
 
     init {
-        global.defineFun("print", Callable.BuiltIn { value -> println(value) })
-        global.defineFun("readLine", Callable.BuiltIn(::readLine))
+        global.define("print", Callable.BuiltIn { value -> println(value) })
+        global.define("readLine", Callable.BuiltIn(::readLine))
     }
 
-    fun interpret(program: Program) = execStmts(program.stmts)
+    fun interpret(program: Program) = execSequence(program.stmts)
 
-    private fun execStmts(stmts: List<Stmt>): Value {
+    private fun execSequence(stmts: Iterable<Stmt>): Value {
         var lastValue: Value = null
         for (stmt in stmts) {
-            lastValue = exec(stmt)
+            val (value, escape) = exec(stmt)
+            lastValue = value
+            if (escape) break
         }
         return lastValue
     }
 
-    private fun contextPush() {
-        ctx = Context(ctx)
+    private fun contextPush(function: Callable.FunctionDef? = null): Context {
+        ctx = Context(ctx, function)
+        return ctx
     }
 
     private fun contextPop() {
-        if (ctx === global) throw RuntimeError("cannot pop global ctx")
+        if (ctx === global)
+            throw RuntimeError("cannot pop global context")
         ctx = ctx.enclosing!!
     }
 
-    private fun exec(stmt: Stmt): Value = when (stmt) {
+    private fun exec(stmt: Stmt): StmtResult = when (stmt) {
         is Stmt.VariableDecl -> {
             val value = if (stmt.init != null) eval(stmt.init) else null
-            val target = stmt.name.name
-            ctx.defineVar(target, value)
-            value
+            val name = stmt.name.name
+            ctx.define(name, value)
+            StmtResult(value)
         }
-        is Stmt.FunctionDecl -> {
-            ctx.defineFun(
-                stmt.name.name,
-                Callable.FunctionDef(
-                    parameters = stmt.parameters.map { it.name },
-                    body = stmt.body,
-                )
-            )
+        is Stmt.FunctionDef -> {
+            val func = ctx.define(stmt.name.name, Callable.FunctionDef(stmt))
+            StmtResult(func)
+        }
+        is Stmt.Return -> {
+            if (ctx.function == null)
+                throw RuntimeError("returning outside of a function")
+            val result = eval(stmt.expr)
+            contextPop()
+            StmtResult(result, escape = true)
         }
         is Stmt.Block -> {
             contextPush()
-            val result = execStmts(stmt.stmts)
+            val result = execSequence(stmt.stmts)
             contextPop()
-            result
+            StmtResult(result)
         }
-        is Stmt.ExprStmt -> eval(stmt.expr)
-        else -> throw RuntimeError("unknown stmt type", stmt)
+        is Stmt.ExprStmt ->
+            StmtResult(eval(stmt.expr))
+        else ->
+            throw RuntimeError("unknown stmt type", stmt)
     }
 
     private fun eval(expr: Expr): Value = when (expr) {
@@ -86,17 +96,19 @@ class Interpreter {
     }
 
     private fun doCall(callee: Callable, arguments: List<Value>): Value = when (callee) {
-        is Callable.BuiltIn -> callee.call(arguments)
+        is Callable.BuiltIn ->
+            callee.call(arguments)
         is Callable.FunctionDef -> {
-            contextPush()
-            for ((param, arg) in callee.parameters.zip(arguments)) {
-                ctx.defineVar(param, arg)
-            }
-            val result = execStmts(callee.body.stmts)
-            contextPop()
+            val ctx = contextPush(function = callee)
+            for ((param, arg) in callee.def.parameters.zip(arguments))
+                ctx.define(param.name, arg)
+            val result = execSequence(callee.def.body.stmts)
+            if (ctx === this.ctx)
+                contextPop()
             result
         }
-        else -> throw RuntimeError("unsupported Callable $callee")
+        else ->
+            throw RuntimeError("unsupported Callable $callee")
     }
 
     private fun evalUnaryExpr(expr: Expr.Unary): Value {
@@ -105,7 +117,8 @@ class Interpreter {
             MINUS ->
                 if (right is Double) -right
                 else throw RuntimeError("rhs must be double for unary minus", expr)
-            BANG -> !isTruthy(right)
+            BANG ->
+                !isTruthy(right)
             else -> throw RuntimeError("unexpected unary operator", expr)
         }
     }

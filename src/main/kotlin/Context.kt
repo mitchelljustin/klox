@@ -1,4 +1,4 @@
-class Context(val enclosing: Context? = null) {
+class Context(val enclosing: Context? = null, val function: Callable.FunctionDef? = null) {
     class NotFoundError(target: String) : Exception("value not found: '$target'")
 
     private var binding = HashMap<String, Value>()
@@ -6,12 +6,10 @@ class Context(val enclosing: Context? = null) {
     fun resolve(target: String): Value =
         binding.getOrElse(target) { enclosing?.resolve(target) } ?: throw NotFoundError(target)
 
-    fun defineVar(target: String, init: Value = null): Value {
-        binding[target] = init
+    fun define(name: String, init: Value = null): Value {
+        binding[name] = init
         return init
     }
-
-    fun defineFun(target: String, function: Callable) = defineVar(target, function)
 
     fun assign(target: String, value: Value): Boolean {
         if (target !in binding)

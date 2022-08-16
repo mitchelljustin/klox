@@ -18,9 +18,11 @@ open class Stmt : AST() {
 
     data class ExprStmt(val expr: Expr) : Stmt()
 
+    data class Return(val expr: Expr) : Stmt()
+
     data class VariableDecl(val name: Ident, val init: Expr?) : Stmt()
 
-    data class FunctionDecl(val name: Ident, val parameters: List<Ident>, val body: Block) : Stmt()
+    data class FunctionDef(val name: Ident, val parameters: List<Ident>, val body: Block) : Stmt()
 }
 
 open class Expr : AST() {

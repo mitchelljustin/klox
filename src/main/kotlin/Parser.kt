@@ -59,7 +59,8 @@ class Parser(private val tokens: List<Token>) {
 
     private fun program(): Program {
         val stmts = ArrayList<Stmt>()
-        while (!isAtEnd) stmts.add(declaration())
+        while (!isAtEnd)
+            stmts.add(declaration())
         return Program(stmts)
     }
 
@@ -67,7 +68,7 @@ class Parser(private val tokens: List<Token>) {
         match(LET) -> {
             val name = ident(" after keyword 'let'")
             val init = if (match(EQUAL)) expression() else null
-            consume(SEMICOLON, "expected semicolon at end of stmt")
+            consume(SEMICOLON, "expected ';' at end of let declaration")
             Stmt.VariableDecl(name, init)
         }
         match(FUN) -> {
@@ -76,17 +77,21 @@ class Parser(private val tokens: List<Token>) {
             val parameters = parenCommaList(::ident, "parameter")
             consume(LEFT_BRACE, "expected '{' after function signature")
             val body = block()
-            Stmt.FunctionDecl(name, parameters, body)
+            Stmt.FunctionDef(name, parameters, body)
         }
         else -> statement()
     }
 
     private fun statement(): Stmt {
         val stmt = when {
-            match(LEFT_BRACE) -> return block()
-            else -> exprStmt()
+            match(LEFT_BRACE) ->
+                return block()
+            match(RETURN) ->
+                Stmt.Return(expression())
+            else ->
+                exprStmt()
         }
-        consume(SEMICOLON, "expected semicolon at end of stmt")
+        consume(SEMICOLON, "expected ';' at end of statement")
         return stmt
     }
 
