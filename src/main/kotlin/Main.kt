@@ -32,7 +32,7 @@ class Lox {
                 val result = runInterpreter(line)
                 if (!result.isNil) println("=> $result")
             } catch (err: Exception) {
-                println("!! ${err::class.simpleName} ${err.message}")
+                println("!! ${err::class.simpleName}: ${err.message}")
             }
         }
     }

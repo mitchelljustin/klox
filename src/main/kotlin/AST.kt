@@ -18,17 +18,17 @@ open class Stmt : AST() {
 
     data class ExprStmt(val expr: Expr, val emitValue: Boolean) : Stmt()
 
-    data class Return(val expr: Expr) : Stmt()
+    data class Return(val retVal: Expr?) : Stmt()
 
     class Break : Stmt() {
         override fun toString() = "Break()"
     }
 
-    data class If(val condition: Expr, val ifBody: Stmt, val elseBody: Stmt?) : Stmt()
+    data class If(val condition: Expr, val ifBody: Block, val elseBody: Block?) : Stmt()
 
-    data class For(val init: Stmt?, val condition: Expr?, val update: Expr?, val body: Stmt) : Stmt()
+    data class For(val init: Stmt?, val condition: Expr?, val update: Expr?, val body: Block) : Stmt()
 
-    data class ForIn(val iterator: Ident, val iteratee: Expr, val body: Stmt) : Stmt()
+    data class ForIn(val iterator: Ident, val iteratee: Expr, val body: Block) : Stmt()
 
     data class VariableDecl(val name: Ident, val init: Expr?) : Stmt()
 
@@ -42,11 +42,15 @@ open class Expr : AST() {
 
     data class Unary(val operator: Token, val right: Expr) : Expr()
 
-    data class Variable(val target: Ident) : Expr()
+    data class Variable(val target: Ident) : Expr() {
+        override fun toString() = "Variable(${target.name})"
+    }
 
     data class Assignment(val target: Ident, val operator: Token, val value: Expr) : Expr()
 
     data class Call(val target: Expr, val arguments: List<Expr>) : Expr()
+
+    data class Access(val target: Expr, val member: Ident) : Expr()
 
     class Literal(val value: Any?) : Expr() {
         override fun toString() = when (value) {

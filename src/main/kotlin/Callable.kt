@@ -1,11 +1,14 @@
-interface Callable {
-    val arity: Int
+abstract class Callable {
+    abstract val arity: Int
+    abstract val name: String
 
-    data class BuiltIn(
+    override fun toString() = "${name}/$arity"
+
+    class BuiltIn(
         override val arity: Int,
-        val name: String,
+        override val name: String,
         val call: (List<Value>) -> Value,
-    ) : Callable {
+    ) : Callable() {
         constructor(name: String, f: () -> Value) :
                 this(arity = 0, name, { f() })
 
@@ -18,11 +21,18 @@ interface Callable {
         override fun toString() = "builtin:$name/$arity"
     }
 
-    data class FunctionDef(val def: Stmt.FunctionDef) : Callable {
+    class FunctionDef(val def: Stmt.FunctionDef) : Callable() {
         override val arity: Int
             get() = def.parameters.size
+        override val name: String
+            get() = def.name.name
+    }
 
-        override fun toString() = "${def.name.name}/$arity"
+    class Method(val self: Value, val function: Callable) : Callable() {
+        override val arity: Int
+            get() = function.arity - 1
+        override val name: String
+            get() = "${self.type}.${function.name}"
     }
 }
 

@@ -1,5 +1,4 @@
 open class Value(val inner: Any?, val type: Type) {
-
     class CastException(value: Value, targetType: String) :
         TypeCastException(
             when (value.inner) {
@@ -18,17 +17,20 @@ open class Value(val inner: Any?, val type: Type) {
         Nil,
     }
 
-
     companion object {
-        val Nil = Value(null, Type.Nil)
-        val False = Value(false, Type.Boolean)
-        val True = Value(true, Type.Boolean)
+        val Nil = Value(null)
+        val False = Value(false)
+        val True = Value(true)
+
+        @Suppress("FunctionName")
+        fun Atom(name: String) = Value(name, Type.Atom)
     }
 
     constructor(inner: Any?) : this(
         when (inner) {
             is Value -> inner.inner
-            is List<*> -> inner.map { Value(it) }
+            is ArrayList<*> -> inner.map { Value(it) }
+            is Atom -> inner.name // intern the atom
             else -> inner
         },
         when (inner) {
@@ -37,7 +39,7 @@ open class Value(val inner: Any?, val type: Type) {
             is Boolean -> Type.Boolean
             is Atom -> Type.Atom
             is Function<*>, is Callable -> Type.Callable
-            is List<*> -> Type.List
+            is ArrayList<*> -> Type.List
             null, is Unit -> Type.Nil
             is Value -> inner.type
             else -> throw Exception("cannot convert to Lox value: $inner")
@@ -58,6 +60,18 @@ open class Value(val inner: Any?, val type: Type) {
             else -> true
         }
     val isFalsy get() = !isTruthy
+    val typeAtom: Value
+        get() = Atom(
+            when (type) {
+                Type.String -> "String"
+                Type.Double -> "Double"
+                Type.Boolean -> "Boolean"
+                Type.Callable -> "Callable"
+                Type.Atom -> "Atom"
+                Type.List -> "List"
+                Type.Nil -> "Nil"
+            }
+        )
 
     inline fun <reified T> map(f: (T) -> T): Value = Value(f(into()))
     inline fun <reified T> into(): T = when (inner) {
@@ -66,13 +80,18 @@ open class Value(val inner: Any?, val type: Type) {
     }
 
     override operator fun equals(other: Any?) = when (other) {
-        is Value -> type == other.type && inner == other.inner
+        is Value -> when {
+            isNil && other.isNil -> true
+            isNil -> false
+            else -> type == other.type && inner == other.inner
+        }
         else -> false
     }
 
     override fun toString() = when {
         inner is Double && inner - inner.toInt() == 0.0 ->
             inner.toInt().toString()
+        isString -> "\"$inner\""
         else -> inner.toString()
     }
 
@@ -81,6 +100,5 @@ open class Value(val inner: Any?, val type: Type) {
         result = 31 * result + type.hashCode()
         return result
     }
-
 
 }

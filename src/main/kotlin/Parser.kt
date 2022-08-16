@@ -54,7 +54,7 @@ class Parser(private val tokens: List<Token>) {
         if (blockStmt != null)
             return blockStmt
         val lineStmt = when {
-            match(RETURN) -> Stmt.Return(expression())
+            match(RETURN) -> Stmt.Return(if (check(SEMICOLON)) null else expression())
             match(BREAK) -> Stmt.Break()
             else -> null
         }
@@ -72,12 +72,12 @@ class Parser(private val tokens: List<Token>) {
             check(LEFT_CURLY) -> null
             match(SEMICOLON) -> null
             match(LET) -> variableDecl()
-            else -> exprStmt(noEmitError = "expected ';' after for init clause")
+            else -> exprStmt(expectSemicolon = "expected ';' after for init clause")
         }
         val condition = when {
             check(LEFT_CURLY) -> null
             match(SEMICOLON) -> null
-            else -> exprStmt(noEmitError = "expected ';' after for condition clause").expr
+            else -> exprStmt(expectSemicolon = "expected ';' after for condition clause").expr
         }
         val update = when {
             check(LEFT_CURLY) -> null
@@ -101,7 +101,7 @@ class Parser(private val tokens: List<Token>) {
         val condition = expression()
         consume(LEFT_CURLY, "expected '{' after if-condition")
         val ifBody = block()
-        var elseBody: Stmt? = null
+        var elseBody: Stmt.Block? = null
         if (match(ELSE)) {
             consume(LEFT_CURLY, "expected '{' after else")
             elseBody = block()
@@ -117,12 +117,12 @@ class Parser(private val tokens: List<Token>) {
         return Stmt.Block(stmts)
     }
 
-    private fun exprStmt(noEmitError: String? = null) =
+    private fun exprStmt(expectSemicolon: String? = null) =
         Stmt.ExprStmt(
-            expression(), emitValue = when (noEmitError) {
+            expression(), emitValue = when (expectSemicolon) {
                 null -> !match(SEMICOLON)
                 else -> {
-                    consume(SEMICOLON, noEmitError)
+                    consume(SEMICOLON, expectSemicolon)
                     false
                 }
             }
@@ -187,7 +187,7 @@ class Parser(private val tokens: List<Token>) {
     }
 
     private fun call(): Expr {
-        val expr = primary()
+        val expr = access()
 
         if (match(LEFT_PAREN)) {
             val arguments = commaList(::expression, "argument", RIGHT_PAREN)
@@ -197,15 +197,27 @@ class Parser(private val tokens: List<Token>) {
         return expr
     }
 
-    private fun <T> commaList(paramFn: () -> T, kind: String, ender: TokenType): ArrayList<T> {
+    private fun access(): Expr {
+        var expr = primary()
+
+        while (match(DOT)) {
+            val field = ident()
+            expr = Expr.Access(expr, field)
+        }
+
+        return expr
+    }
+
+    private fun <T> commaList(itemFunc: () -> T, kind: String, ender: TokenType): ArrayList<T> {
         val list = ArrayList<T>()
         while (!match(ender)) {
-            val item = paramFn()
+            val item = itemFunc()
             list.add(item)
             if (!check(ender))
                 consume(COMMA, "expected ',' after $kind")
         }
-        match(COMMA) // optional trailing comma
+        if (list.isNotEmpty())
+            match(COMMA) // optional trailing comma
         return list
     }
 
@@ -225,7 +237,7 @@ class Parser(private val tokens: List<Token>) {
         else -> throw error("expected primary expression")
     }
 
-    private fun ident(where: String? = null) =
+    private fun ident(where: String = "") =
         if (match(IDENTIFIER)) Ident(prevToken.lexeme)
         else throw error("expected identifier$where")
 

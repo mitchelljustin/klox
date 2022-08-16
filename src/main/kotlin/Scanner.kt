@@ -5,8 +5,9 @@ class Scanner(
 ) {
     class ScanError(
         message: String,
-        line: Int,
-    ) : Exception("[line $line] $message")
+        char: Char?,
+        pos: Pos,
+    ) : Exception("['${char ?: ""}' at $pos] $message")
 
     private val tokens = ArrayList<Token>()
     private var start = 0
@@ -14,6 +15,7 @@ class Scanner(
     private var line = 0
 
     private val isAtEnd get() = current >= source.length
+    private val prevChar get() = source.getOrNull(current - 1)
     private val curChar get() = source.getOrNull(current)
     private val nextChar get() = source.getOrNull(current + 1)
     private val curPos get() = Pos(line, current)
@@ -43,6 +45,9 @@ class Scanner(
         tokens.add(Token(EOF, "", curPos))
         return tokens
     }
+
+    private fun error(message: String, previous: Boolean = false) =
+        ScanError(message, if (previous) prevChar else curChar, curPos)
 
     private fun advance() = source[current++]
 
@@ -85,7 +90,7 @@ class Scanner(
             in DIGITS -> number()
             in ALPHA -> identifier()
             ':' -> atom()
-            else -> throw ScanError("unexpected char: '$char'", line)
+            else -> throw error("unexpected char", previous = true)
         }
     }
 
@@ -114,7 +119,7 @@ class Scanner(
             advance()
         }
 
-        if (isAtEnd) throw ScanError("unterminated string", line)
+        if (isAtEnd) throw error("unterminated string")
 
         advance()
 
@@ -123,6 +128,7 @@ class Scanner(
     }
 
     private fun atom() {
+        if (curChar !in ALPHA) throw error("first char of atom must be letter")
         while (curChar in ALPHANUM) advance()
         val literal = source.slice(start + 1 until current) // omit colon
         addToken(ATOM, literal)
