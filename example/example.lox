@@ -1,1 +1,7 @@
-[] = 3;
+fun printHiThrice() {
+    for i in 0..3 {
+        print("hi");
+    }
+}
+printHiThrice()
+let f = 

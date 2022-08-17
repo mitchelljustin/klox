@@ -28,7 +28,7 @@ class Parser(private val tokens: List<Token>) {
 
     private fun declaration(): Stmt = when {
         matchAndConsume(LET) -> variableDecl()
-        matchAndConsume(FUN) -> functionDef()
+        matchAndConsume(FUN) -> functionDecl()
         else -> statement()
     }
 
@@ -39,13 +39,16 @@ class Parser(private val tokens: List<Token>) {
         return Stmt.VariableDecl(name, init)
     }
 
-    private fun functionDef(): Stmt.FunctionDef {
-        val name = ident(" after keyword 'fun'")
-        consume(LEFT_PAREN, " after function name")
-        val parameters = commaList(::ident, RIGHT_PAREN, "param list")
-        consume(LEFT_CURLY, " after function signature")
-        val body = block()
-        return Stmt.FunctionDef(name, parameters, body)
+    private fun functionDecl(): Stmt.FunctionDecl {
+        val name = ident(" for name in function declaration")
+        val parameters = fullParamList()
+        val body = fullBlock(" after function signature")
+        return Stmt.FunctionDecl(FunctionDef(name, parameters, body))
+    }
+
+    private fun fullParamList(): ArrayList<Ident> {
+        consume(LEFT_PAREN, " to start param list")
+        return commaList(::ident, RIGHT_PAREN, "param list")
     }
 
     private fun statement(): Stmt {
@@ -122,29 +125,28 @@ class Parser(private val tokens: List<Token>) {
         }
         consume(IN, " after for..in iterator")
         val iteratee = expression()
-        consume(LEFT_CURLY, " after for..in initializer")
-        val body = block()
+        val body = fullBlock(" after for..in initializer")
         return Stmt.ForIn(iterator, iteratee, body)
     }
 
 
     private fun whileStmt(): Stmt.While {
         val condition = expression()
-        consume(LEFT_CURLY, " after while condition")
-        val body = block()
+        val body = fullBlock(" after while condition")
         return Stmt.While(condition, body)
     }
 
     private fun ifExpr(): Expr.If {
         val condition = expression()
-        consume(LEFT_CURLY, " after if-condition")
-        val ifBody = block()
-        var elseBody: Expr.Block? = null
-        if (matchAndConsume(ELSE)) {
-            consume(LEFT_CURLY, " after else")
-            elseBody = block()
-        }
+        val ifBody = fullBlock(" after if-condition")
+        val elseBody = if (matchAndConsume(ELSE)) fullBlock(" after else") else null
         return Expr.If(condition, ifBody, elseBody)
+    }
+
+    private fun fullBlock(where: String): Expr.Block {
+        consume(LEFT_CURLY, where)
+        val body = block()
+        return body
     }
 
     private fun block(): Expr.Block {
@@ -173,7 +175,15 @@ class Parser(private val tokens: List<Token>) {
         matchAndConsume(LEFT_CURLY) -> block()
         matchAndConsume(IF) -> ifExpr()
         matchAndConsume(MATCH) -> matchExpr()
+        matchAndConsume(FUN) -> functionExpr()
         else -> assignment()
+    }
+
+    private fun functionExpr(): Expr {
+        val name = if (check(IDENTIFIER)) ident() else null
+        val parameters = fullParamList()
+        val body = fullBlock(" after function expression signature")
+        return Expr.Function(FunctionDef(name, parameters, body))
     }
 
     private fun assignment(): Expr {

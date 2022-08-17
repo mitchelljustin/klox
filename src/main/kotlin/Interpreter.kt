@@ -58,7 +58,7 @@ class Interpreter {
             ret.value
         }
 
-    private fun contextPush(function: Callable.FunctionDef? = null): Context {
+    private fun contextPush(function: Callable.Function? = null): Context {
         ctx = Context(ctx, function)
         return ctx
     }
@@ -72,7 +72,7 @@ class Interpreter {
     private fun exec(stmt: Stmt) {
         when (stmt) {
             is Stmt.VariableDecl -> execVariableDecl(stmt)
-            is Stmt.FunctionDef -> execFunctionDef(stmt)
+            is Stmt.FunctionDecl -> execFunctionDecl(stmt)
             is Stmt.ForIn -> execForIn(stmt)
             is Stmt.While -> execWhile(stmt)
             is Stmt.Break -> throw Break()
@@ -152,7 +152,8 @@ class Interpreter {
         return lastValue
     }
 
-    private fun execFunctionDef(stmt: Stmt.FunctionDef) = ctx.define(stmt.name.name, Value(Callable.FunctionDef(stmt)))
+    private fun execFunctionDecl(stmt: Stmt.FunctionDecl) =
+        ctx.define(stmt.def.name!!.name, Value(Callable.Function(stmt.def)))
 
     private fun execVariableDecl(stmt: Stmt.VariableDecl) {
         val value = if (stmt.init != null) eval(stmt.init) else Value.Nil
@@ -282,8 +283,11 @@ class Interpreter {
         is Expr.If -> evalIf(expr)
         is Expr.Match -> evalMatch(expr)
         is Expr.Index -> evalIndex(expr)
+        is Expr.Function -> evalFunction(expr)
         else -> throw RuntimeError("illegal expr type", expr)
     }
+
+    private fun evalFunction(expr: Expr.Function) = Value(Callable.Function(expr.def))
 
     private fun evalIndex(expr: Expr.Index): Value {
         val target = eval(expr.target)
@@ -354,7 +358,7 @@ class Interpreter {
 
             newValue
         }
-        is Expr.Access -> TODO("not implemented")
+        is Expr.Access -> TODO("pending object model")
         is Expr.Index -> {
             val target = eval(expr.target.target)
             val indexValue = eval(expr.target.index)
@@ -394,7 +398,7 @@ class Interpreter {
 
     private fun doCall(callee: Callable, arguments: List<Value>): Value = when (callee) {
         is Callable.BuiltIn -> callee.call(arguments)
-        is Callable.FunctionDef -> {
+        is Callable.Function -> {
             val ctx = contextPush(function = callee)
             for ((param, arg) in callee.def.parameters.zip(arguments))
                 ctx.define(param.name, arg)

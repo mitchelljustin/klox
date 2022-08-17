@@ -21,11 +21,11 @@ abstract class Callable {
         override fun toString() = "builtin:$name/$arity"
     }
 
-    class FunctionDef(val def: Stmt.FunctionDef) : Callable() {
+    class Function(val def: FunctionDef) : Callable() {
         override val arity: Int
             get() = def.parameters.size
         override val name: String
-            get() = def.name.name
+            get() = if (def.name != null) def.name.name else "<anonymous>"
     }
 
     class Method(val self: Value, val function: Callable) : Callable() {

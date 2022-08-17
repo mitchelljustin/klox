@@ -26,13 +26,15 @@ abstract class Stmt : AST() {
 
     data class VariableDecl(val name: Ident, val init: Expr?) : Stmt()
 
-    data class FunctionDef(val name: Ident, val parameters: List<Ident>, val body: Expr.Block) : Stmt()
+    data class FunctionDecl(val def: FunctionDef) : Stmt()
 }
 
 abstract class Expr : AST() {
     class Block(val stmts: List<Stmt>) : Expr() {
         override fun toString() = "Block(${listToString(stmts)})"
     }
+
+    data class Function(val def: FunctionDef) : Expr()
 
     data class If(val condition: Expr, val ifBody: Block, val elseBody: Block?) : Expr()
 
@@ -79,6 +81,8 @@ data class Ident(val name: String) : AST() {
 }
 
 data class MatchClause(val pattern: MatchPattern, val body: Stmt.ExprStmt)
+
+data class FunctionDef(val name: Ident?, val parameters: List<Ident>, val body: Expr.Block)
 
 abstract class MatchPattern : AST() {
     data class Literal(val value: Expr.Literal) : MatchPattern()
