@@ -52,6 +52,8 @@ abstract class Expr : AST() {
 
     data class Call(val target: Expr, val arguments: List<Expr>) : Expr()
 
+    data class Index(val target: Expr, val index: Expr) : Expr()
+
     data class Access(val target: Expr, val member: Ident) : Expr()
 
     data class Tuple(val elements: List<Expr>) : Expr()

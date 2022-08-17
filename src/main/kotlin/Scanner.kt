@@ -13,6 +13,7 @@ class Scanner(
     private var start = 0
     private var current = 0
     private var line = 0
+    private var column = 0
 
     private val isAtEnd get() = current >= source.length
     private val prevChar get() = source.getOrNull(current - 1)
@@ -49,7 +50,7 @@ class Scanner(
     private fun error(message: String, previous: Boolean = false) =
         ScanError(message, if (previous) prevChar else curChar, curPos)
 
-    private fun advance() = source[current++]
+    private fun advance() = source[increment()]
 
     private fun addToken(type: TokenType, literal: Any? = null) {
         val lexeme = source.slice(start until current)
@@ -60,9 +61,14 @@ class Scanner(
         isAtEnd -> false
         curChar != expected -> false
         else -> {
-            current++
+            increment()
             true
         }
+    }
+
+    private fun increment(): Int {
+        column++
+        return current++
     }
 
     private fun scanToken() {
@@ -86,7 +92,7 @@ class Scanner(
             in SYMBOL_SINGLE ->
                 addToken(SYMBOL_SINGLE[char]!!)
             in setOf(' ', '\r', '\t') -> {}
-            '\n' -> line++
+            '\n' -> newline()
             '"' -> string()
             in DIGITS -> number()
             in ALPHA -> identifier()
@@ -115,7 +121,7 @@ class Scanner(
 
     private fun string() {
         while (curChar != '"' && !isAtEnd) {
-            if (curChar == '\n') line++
+            if (curChar == '\n') newline()
             advance()
         }
 
@@ -125,6 +131,11 @@ class Scanner(
 
         val literal = source.slice(start + 1 until current - 1) // omit quotes
         addToken(STRING, literal)
+    }
+
+    private fun newline() {
+        line++
+        column = 0
     }
 
     private fun atomOrColon() {

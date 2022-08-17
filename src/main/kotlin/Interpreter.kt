@@ -13,8 +13,8 @@ class Interpreter {
         }
     )
 
-    class TypeError(expected: Value.Type, actual: Value.Type) : RuntimeError(
-        "expected type $expected, got type $actual"
+    class TypeError(where: String, expected: String, actual: String? = null) : RuntimeError(
+        "expected type $expected$where${if (actual != null) ", got $actual" else ""}"
     )
 
     class Return(val value: Value) : Exception()
@@ -40,7 +40,9 @@ class Interpreter {
     }
 
     fun interpret(program: Program) = try {
-        execSequence(program.stmts)
+        val result = execSequence(program.stmts)
+        lastValue = Value.Nil
+        result
     } catch (_: Break) {
         throw RuntimeError("illegal break outside of loop")
     }
@@ -105,7 +107,8 @@ class Interpreter {
     }
 
     private fun execExprStmt(stmt: Stmt.ExprStmt): Value {
-        lastValue = if (stmt.emitValue) eval(stmt.expr) else Value.Nil
+        val result = eval(stmt.expr)
+        lastValue = if (stmt.emitValue) result else Value.Nil
         return lastValue
     }
 
@@ -158,8 +161,22 @@ class Interpreter {
         }
         iterator.forEach { ctx.define(it) }
         val iteratee = eval(stmt.iteratee)
-        when (iteratee.type) {
-            Value.Type.Range -> {
+        try {
+            doIteration(stmt, ctx, iteratee, iterator)
+        } catch (_: Break) {
+        }
+        contextPop()
+        return Value.Nil
+    }
+
+    private fun doIteration(
+        stmt: Stmt.ForIn,
+        ctx: Context,
+        iteratee: Value,
+        iterator: List<String>,
+    ) {
+        when {
+            iteratee.isRange -> {
                 val (start, end) = iteratee.intoPair()
                 if (!start.isInt || !end.isInt)
                     throw RuntimeError("range components must be integers")
@@ -168,14 +185,10 @@ class Interpreter {
                 val range = start.intoInt() until end.intoInt()
                 for (i in range) {
                     ctx.assign(iterator.first(), Value(i))
-                    try {
-                        evalBlock(stmt.body)
-                    } catch (_: Break) {
-                        break
-                    }
+                    evalBlock(stmt.body)
                 }
             }
-            Value.Type.List -> {
+            iteratee.isList -> {
                 for (item in iteratee.intoList()) {
                     when {
                         item.isList && iterator.size == item.intoList().size ->
@@ -187,29 +200,19 @@ class Interpreter {
                         else ->
                             throw RuntimeError("wrong number of variables")
                     }
-                    try {
-                        evalBlock(stmt.body)
-                    } catch (_: Break) {
-                        break
-                    }
+                    evalBlock(stmt.body)
                 }
             }
-            Value.Type.Dictionary -> {
-                for ((k, v) in iteratee.intoDictionary()) {
-                    if (iterator.size != 2) throw RuntimeError("need (k,v) tuple as iterator for dictionary")
+            iteratee.isDict -> {
+                for ((k, v) in iteratee.intoDict()) {
+                    if (iterator.size != 2) throw RuntimeError("need (k,v) tuple as iterator for dict")
                     ctx.assign(iterator[0], Value(k))
                     ctx.assign(iterator[1], v)
-                    try {
-                        evalBlock(stmt.body)
-                    } catch (_: Break) {
-                        break
-                    }
+                    evalBlock(stmt.body)
                 }
             }
             else -> throw RuntimeError("illegal loop iterator: ${iteratee.type}")
         }
-        contextPop()
-        return Value.Nil
     }
 
     private fun evalBlock(stmt: Expr.Block): Value {
@@ -232,7 +235,40 @@ class Interpreter {
         is Expr.Block -> evalBlock(expr)
         is Expr.If -> evalIf(expr)
         is Expr.Match -> evalMatch(expr)
+        is Expr.Index -> evalIndex(expr)
         else -> throw RuntimeError("illegal expr type", expr)
+    }
+
+    private fun evalIndex(expr: Expr.Index): Value {
+        val target = eval(expr.target)
+        val indexValue = eval(expr.index)
+        return when {
+            target.isList -> {
+                val index = indexListInt(indexValue, " for list index")
+                target.intoList()[index]
+            }
+            target.isDict -> {
+                val key = indexDictKey(indexValue, " for dict key")
+                target.intoDict()[key] ?: Value.Nil
+            }
+            else -> throw TypeError(" in index expression target", "List or Dict", target.type.toString())
+        }
+    }
+
+    private fun indexDictKey(indexValue: Value, where: String): String {
+        val key = when {
+            indexValue.isString -> indexValue.into()
+            indexValue.isAtom -> indexValue.into<Atom>().name
+            else -> {
+                throw TypeError(where, "String or Atom", indexValue.type.toString())
+            }
+        }
+        return key
+    }
+
+    private fun indexListInt(index: Value, where: String): Int {
+        if (!index.isInt) throw TypeError(where, "Int", index.type.toString())
+        return index.intoInt()
     }
 
     private fun evalRange(expr: Expr.Range) = Value.Range(eval(expr.start), eval(expr.end))
@@ -249,10 +285,8 @@ class Interpreter {
         val target = eval(expr.target)
         val member = expr.member.name
         return when {
-            target.isDictionary -> {
-                val dict = target.intoDictionary()
-                dict[member] ?: Value.Nil
-            }
+            target.isDict && member == "length" -> Value(target.intoDict().size)
+            target.isList && member == "length" -> Value(target.intoList().size)
             else -> throw RuntimeError("illegal access: '$member' on ${target.type}")
         }
     }
@@ -271,16 +305,25 @@ class Interpreter {
 
             newValue
         }
-        is Expr.Access -> {
+        is Expr.Access -> TODO("not implemented")
+        is Expr.Index -> {
             val target = eval(expr.target.target)
-            if (!target.isDictionary)
-                throw RuntimeError("can only assign to Dictionary member, not ${target.type}")
-            val member = expr.target.member.name
-            val newValue = eval(expr.value)
-            if (expr.operator.type != EQUAL)
-                throw RuntimeError("only equal(=) assignment supported for Dictionary access")
-            target.intoDictionary()[member] = newValue
-            newValue
+            val indexValue = eval(expr.target.index)
+            when {
+                target.isList -> {
+                    val index = indexListInt(indexValue, " for list assignment index")
+                    val value = eval(expr.value)
+                    target.intoList()[index] = value
+                    value
+                }
+                target.isDict -> {
+                    val key = indexDictKey(indexValue, " for dict assignment key")
+                    val value = eval(expr.value)
+                    target.intoDict()[key] = value
+                    value
+                }
+                else -> throw TypeError(" for index assignment", "Dict or List", target.type.toString())
+            }
         }
         else -> throw RuntimeError("illegal assignment target: ${expr.target::class.simpleName}")
     }

@@ -17,7 +17,7 @@ open class Value(val inner: Any?, val type: Type) {
         Atom,
         List,
         Range,
-        Dictionary,
+        Dict,
         Nil,
     }
 
@@ -48,7 +48,7 @@ open class Value(val inner: Any?, val type: Type) {
             is BareAtom -> Type.Atom
             is Function<*>, is Callable -> Type.Callable
             is ArrayList<*> -> Type.List
-            is HashMap<*, *> -> Type.Dictionary
+            is HashMap<*, *> -> Type.Dict
             null, is Unit -> Type.Nil
             is Value -> inner.type
             else -> throw Exception("cannot convert to Lox value: $inner")
@@ -58,7 +58,7 @@ open class Value(val inner: Any?, val type: Type) {
     val isNil get() = type == Type.Nil
     val isString get() = type == Type.String
     val isList get() = type == Type.List
-    val isDictionary get() = type == Type.Dictionary
+    val isDict get() = type == Type.Dict
     val isRange get() = type == Type.Range
     val isDouble get() = type == Type.Double
     val isInt get() = isDouble && inner is Double && inner - inner.toInt() == 0.0
@@ -80,8 +80,8 @@ open class Value(val inner: Any?, val type: Type) {
         else -> throw CastException(this, T::class.simpleName ?: "unknown")
     }
 
-    fun intoList() = into<List<Value>>()
-    fun intoDictionary() = into<HashMap<String, Value>>()
+    fun intoList() = into<ArrayList<Value>>()
+    fun intoDict() = into<HashMap<String, Value>>()
     fun intoPair() = into<Pair<Value, Value>>()
     fun intoInt() = into<Double>().toInt()
 
@@ -96,7 +96,7 @@ open class Value(val inner: Any?, val type: Type) {
 
     override fun toString() = when {
         isInt -> intoInt().toString()
-        isDictionary && inner is HashMap<*, *> -> {
+        isDict && inner is HashMap<*, *> -> {
             var kvs = inner
                 .map { (k, v) -> "$k: $v" }
                 .joinToString(", ")

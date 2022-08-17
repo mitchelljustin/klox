@@ -4,8 +4,9 @@ class Parser(private val tokens: List<Token>) {
     class ParseError(
         token: Token,
         message: String = "",
-        where: String = "",
-    ) : Exception("[pos ${token.pos}$where] $message, got '${token.lexeme}'")
+    ) : Exception(
+        "[pos ${token.pos} ${if (token.type == EOF) "at end" else "at '${token.lexeme}'"}] $message"
+    )
 
     private var current = 0
 
@@ -77,7 +78,7 @@ class Parser(private val tokens: List<Token>) {
     private fun matchClause(): MatchClause {
         val pattern = pattern()
         consume(RIGHT_ARROW, " after match pattern")
-        val body = exprStmt()
+        val body = exprStmt(forceEmitValue = "cannot end match clause body with a semicolon")
         return MatchClause(pattern, body)
     }
 
@@ -89,14 +90,14 @@ class Parser(private val tokens: List<Token>) {
         matchAndConsume(ELSE) ->
             MatchPattern.Anything(null)
         else ->
-            throw error("illegal match pattern")
+            throw parseError("illegal match pattern")
     }
 
     private fun forInStmt(): Stmt.ForIn {
         val iterator = when {
             check(IDENTIFIER) -> variable()
             check(LEFT_PAREN) -> fullTuple()
-            else -> throw error("iterator must either be single variable or tuple")
+            else -> throw parseError("iterator must either be single variable or tuple")
         }
         consume(IN, " after for..in iterator")
         val iteratee = expression()
@@ -133,10 +134,17 @@ class Parser(private val tokens: List<Token>) {
         return Expr.Block(stmts)
     }
 
-    private fun exprStmt() =
+    private fun exprStmt(forceEmitValue: String? = null) =
         Stmt.ExprStmt(
             expression(),
-            emitValue = !matchAndConsume(SEMICOLON)
+            emitValue = when (forceEmitValue) {
+                null -> !matchAndConsume(SEMICOLON)
+                else -> {
+                    if (matchAndConsume(SEMICOLON))
+                        throw parseError(forceEmitValue)
+                    true
+                }
+            }
         )
 
 
@@ -153,9 +161,15 @@ class Parser(private val tokens: List<Token>) {
         if (matchAndConsume(TokenType.Assignment)) {
             val operator = prevToken
             val value = assignment()
-            if (target !is Expr.Variable && target !is Expr.Access)
-                throw error("only variable and member access are allowed as LHS for assignment")
-            return Expr.Assignment(target, operator, value)
+            when (target) {
+                is Expr.Variable,
+                is Expr.Access,
+                is Expr.Index,
+                ->
+                    return Expr.Assignment(target, operator, value)
+                else ->
+                    throw parseError("illegal LHS for assignment: ${target::class.simpleName}")
+            }
         }
 
         return target
@@ -213,11 +227,23 @@ class Parser(private val tokens: List<Token>) {
     }
 
     private fun call(): Expr {
-        val expr = access()
+        val expr = index()
 
         if (matchAndConsume(LEFT_PAREN)) {
             val arguments = commaList(::expression, RIGHT_PAREN, "arg list")
             return Expr.Call(expr, arguments)
+        }
+
+        return expr
+    }
+
+    private fun index(): Expr {
+        val expr = access()
+
+        if (matchAndConsume(LEFT_SQUARE)) {
+            val index = expression()
+            consume(RIGHT_SQUARE, " after object index")
+            return Expr.Index(expr, index)
         }
 
         return expr
@@ -267,12 +293,12 @@ class Parser(private val tokens: List<Token>) {
             Expr.Literal(Atom(prevToken.literal as String))
         matchAndConsume(LEFT_SQUARE) ->
             collectionLiteral()
-        else -> throw error("expected literal")
+        else -> throw parseError("expected literal")
     }
 
     private fun collectionLiteral(): Expr.Literal = when {
         check(IDENTIFIER) && check(COLON, offset = 1) -> {
-            val entryList = commaList(::dictionaryEntry, RIGHT_SQUARE, "dictionary")
+            val entryList = commaList(::dictEntry, RIGHT_SQUARE, "dict")
             Expr.Literal(hashMapOf(*entryList.toTypedArray()))
         }
         matchAndConsume(COLON) && matchAndConsume(RIGHT_SQUARE) ->
@@ -281,9 +307,9 @@ class Parser(private val tokens: List<Token>) {
             Expr.Literal(commaList(::expression, RIGHT_SQUARE, "array"))
     }
 
-    private fun dictionaryEntry(): Pair<String, Expr> {
-        val key = ident(" for dictionary key")
-        consume(COLON, " after dictionary key")
+    private fun dictEntry(): Pair<String, Expr> {
+        val key = ident(" for dict key")
+        consume(COLON, " after dict key")
         val value = expression()
         return Pair(key.name, value)
     }
@@ -292,7 +318,7 @@ class Parser(private val tokens: List<Token>) {
         check(TokenType.Literals) -> literal()
         check(IDENTIFIER) -> variable()
         matchAndConsume(LEFT_PAREN) -> parenExpr()
-        else -> throw error("expected primary expression")
+        else -> throw parseError("expected primary expression")
     }
 
     private fun parenExpr(): Expr {
@@ -312,7 +338,7 @@ class Parser(private val tokens: List<Token>) {
 
     private fun ident(where: String = "") =
         if (matchAndConsume(IDENTIFIER)) Ident(prevToken.lexeme)
-        else throw error("expected identifier$where")
+        else throw parseError("expected identifier$where")
 
     private fun fullTuple(): Expr.Tuple {
         consume(LEFT_PAREN, " at tuple start")
@@ -355,11 +381,8 @@ class Parser(private val tokens: List<Token>) {
 
     private fun consume(type: TokenType, where: String = ""): Token {
         if (check(type)) return advance()
-        throw error("expected '${type.match}'$where")
+        throw parseError("expected '${type.match}'$where")
     }
 
-    private fun error(message: String): ParseError {
-        val where = if (curToken.type == EOF) " at end" else " at '${curToken.lexeme}'"
-        return ParseError(curToken, message, where)
-    }
+    private fun parseError(message: String) = ParseError(curToken, message)
 }
