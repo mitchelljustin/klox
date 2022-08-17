@@ -83,4 +83,5 @@ data class MatchClause(val pattern: MatchPattern, val body: Stmt.ExprStmt)
 abstract class MatchPattern : AST() {
     data class Literal(val value: Expr.Literal) : MatchPattern()
     data class Anything(val capture: Ident?) : MatchPattern()
+    data class List(val items: ArrayList<MatchPattern>) : MatchPattern()
 }

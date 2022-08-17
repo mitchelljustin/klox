@@ -1,5 +1,8 @@
 import TokenType.*
 
+
+typealias MatchResult = ArrayList<Pair<String, Value>>
+
 class Interpreter {
     companion object {
         const val LastValue = "_"
@@ -41,7 +44,7 @@ class Interpreter {
 
     fun interpret(program: Program) = try {
         val result = execSequence(program.stmts)
-        lastValue = Value.Nil
+        clearLastValue()
         result
     } catch (_: Break) {
         throw RuntimeError("illegal break outside of loop")
@@ -83,8 +86,10 @@ class Interpreter {
     private fun evalMatch(expr: Expr.Match): Value {
         val value = eval(expr.target)
         for (clause in expr.clauses) {
-            val ctx = matchesPattern(value, clause.pattern)
-            if (ctx != null) {
+            val bindings = matchesPattern(value, clause.pattern)
+            if (bindings != null) {
+                contextPush()
+                bindings.forEach { (name, value) -> ctx.define(name, value) }
                 val result = execExprStmt(clause.body)
                 contextPop()
                 return result
@@ -94,16 +99,37 @@ class Interpreter {
         return Value.Nil
     }
 
-    private fun matchesPattern(value: Value, pattern: MatchPattern): Context? = when (pattern) {
+
+    private fun matchesPattern(value: Value, pattern: MatchPattern): MatchResult? = when (pattern) {
         is MatchPattern.Anything -> {
-            val ctx = contextPush()
             if (pattern.capture != null)
-                ctx.define(pattern.capture.name, value)
-            ctx
+                arrayListOf(pattern.capture.name to value)
+            else
+                arrayListOf()
         }
         is MatchPattern.Literal ->
-            if (value == eval(pattern.value)) contextPush() else null
+            if (value == eval(pattern.value)) arrayListOf() else null
+        is MatchPattern.List ->
+            matchesListPattern(value, pattern)
         else -> throw RuntimeError("unimplemented pattern type: ${pattern::class.simpleName}", pattern)
+    }
+
+    private fun matchesListPattern(value: Value, pattern: MatchPattern.List): MatchResult? {
+        if (!value.isList) return null
+        val list = value.intoList()
+        if (list.size != pattern.items.size) return null
+        return try {
+            list
+                .zip(pattern.items)
+                .fold(MatchResult()) { bindings, (itemValue, itemPattern) ->
+                    when (val binding = matchesPattern(itemValue, itemPattern)) {
+                        null -> throw Break()
+                        else -> (bindings + binding) as MatchResult
+                    }
+                }
+        } catch (_: Break) {
+            null
+        }
     }
 
     private fun execExprStmt(stmt: Stmt.ExprStmt): Value {
@@ -141,6 +167,10 @@ class Interpreter {
         return Value.Nil
     }
 
+    private fun clearLastValue() {
+        lastValue = Value.Nil
+    }
+
     private fun execWhile(stmt: Stmt.While): Value {
         while (eval(stmt.condition).isTruthy) {
             try {
@@ -154,17 +184,18 @@ class Interpreter {
 
     private fun execForIn(stmt: Stmt.ForIn): Value {
         val ctx = contextPush()
-        val iterator: List<String> = when (stmt.iterator) {
+        val iterators: List<String> = when (stmt.iterator) {
             is Expr.Variable -> listOf(stmt.iterator.target.name)
             is Expr.Tuple -> stmt.iterator.elements.map { (it as Expr.Variable).target.name }
             else -> throw RuntimeError("unsupported iterator type, check your parser")
         }
-        iterator.forEach { ctx.define(it) }
+        iterators.forEach { ctx.define(it) }
         val iteratee = eval(stmt.iteratee)
         try {
-            doIteration(stmt, ctx, iteratee, iterator)
+            doIteration(stmt, ctx, iteratee, iterators)
         } catch (_: Break) {
         }
+        clearLastValue()
         contextPop()
         return Value.Nil
     }
@@ -173,30 +204,30 @@ class Interpreter {
         stmt: Stmt.ForIn,
         ctx: Context,
         iteratee: Value,
-        iterator: List<String>,
+        iterators: List<String>,
     ) {
         when {
             iteratee.isRange -> {
                 val (start, end) = iteratee.intoPair()
                 if (!start.isInt || !end.isInt)
                     throw RuntimeError("range components must be integers")
-                if (iterator.size != 1)
+                if (iterators.size != 1)
                     throw RuntimeError("range iterator can only have a single variable")
                 val range = start.intoInt() until end.intoInt()
                 for (i in range) {
-                    ctx.assign(iterator.first(), Value(i))
+                    ctx.assign(iterators.first(), Value(i))
                     evalBlock(stmt.body)
                 }
             }
             iteratee.isList -> {
                 for (item in iteratee.intoList()) {
                     when {
-                        item.isList && iterator.size == item.intoList().size ->
-                            iterator
+                        item.isList && iterators.size == item.intoList().size ->
+                            iterators
                                 .zip(item.intoList())
                                 .forEach { (name, element) -> ctx.assign(name, element) }
-                        iterator.size == 1 ->
-                            ctx.assign(iterator.first(), item)
+                        iterators.size == 1 ->
+                            ctx.assign(iterators.first(), item)
                         else ->
                             throw RuntimeError("wrong number of variables")
                     }
@@ -205,9 +236,10 @@ class Interpreter {
             }
             iteratee.isDict -> {
                 for ((k, v) in iteratee.intoDict()) {
-                    if (iterator.size != 2) throw RuntimeError("need (k,v) tuple as iterator for dict")
-                    ctx.assign(iterator[0], Value(k))
-                    ctx.assign(iterator[1], v)
+                    if (iterators.size != 2)
+                        throw RuntimeError("need (k, v) tuple as iterator for dict")
+                    ctx.assign(iterators[0], Value(k))
+                    ctx.assign(iterators[1], v)
                     evalBlock(stmt.body)
                 }
             }
@@ -244,29 +276,32 @@ class Interpreter {
         val indexValue = eval(expr.index)
         return when {
             target.isList -> {
-                val index = indexListInt(indexValue, " for list index")
+                val index = indexInt(indexValue, " for list index")
                 target.intoList()[index]
             }
             target.isDict -> {
                 val key = indexDictKey(indexValue, " for dict key")
                 target.intoDict()[key] ?: Value.Nil
             }
+            target.isString -> {
+                val index = indexInt(indexValue, " for string index")
+                val string = target.into<String>()
+                if (index >= string.length)
+                    return Value.Nil // TODO: error handling ??
+                val char = string[index].toString()
+                Value(char)
+            }
             else -> throw TypeError(" in index expression target", "List or Dict", target.type.toString())
         }
     }
 
-    private fun indexDictKey(indexValue: Value, where: String): String {
-        val key = when {
-            indexValue.isString -> indexValue.into()
-            indexValue.isAtom -> indexValue.into<Atom>().name
-            else -> {
-                throw TypeError(where, "String or Atom", indexValue.type.toString())
-            }
-        }
-        return key
+    private fun indexDictKey(indexValue: Value, where: String): String = when {
+        indexValue.isString -> indexValue.into()
+        indexValue.isAtom -> indexValue.into<Atom>().name
+        else -> throw TypeError(where, "String or Atom", indexValue.type.toString())
     }
 
-    private fun indexListInt(index: Value, where: String): Int {
+    private fun indexInt(index: Value, where: String): Int {
         if (!index.isInt) throw TypeError(where, "Int", index.type.toString())
         return index.intoInt()
     }
@@ -311,7 +346,7 @@ class Interpreter {
             val indexValue = eval(expr.target.index)
             when {
                 target.isList -> {
-                    val index = indexListInt(indexValue, " for list assignment index")
+                    val index = indexInt(indexValue, " for list assignment index")
                     val value = eval(expr.value)
                     target.intoList()[index] = value
                     value
@@ -333,7 +368,7 @@ class Interpreter {
         try {
             callee = eval(expr.target).into()
         } catch (err: Value.CastException) {
-            throw RuntimeError("callee must be a Callable", expr.target)
+            throw TypeError(" for function call", "Callable", err.value.type.toString())
         }
         val callArity = expr.arguments.size
         if (callee.arity != callArity)

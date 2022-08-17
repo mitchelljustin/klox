@@ -83,12 +83,16 @@ class Parser(private val tokens: List<Token>) {
     }
 
     private fun pattern(): MatchPattern = when {
-        check(TokenType.Literals) ->
-            MatchPattern.Literal(literal())
+        matchAndConsume(LEFT_SQUARE) ->
+            MatchPattern.List(
+                commaList(::pattern, RIGHT_SQUARE, "list pattern")
+            )
         check(IDENTIFIER) ->
             MatchPattern.Anything(ident())
         matchAndConsume(ELSE) ->
             MatchPattern.Anything(null)
+        check(TokenType.Literals) ->
+            MatchPattern.Literal(literal())
         else ->
             throw parseError("illegal match pattern")
     }

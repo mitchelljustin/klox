@@ -1,7 +1,7 @@
 import Atom as BareAtom
 
 open class Value(val inner: Any?, val type: Type) {
-    class CastException(value: Value, targetType: String) :
+    class CastException(val value: Value, val targetType: String) :
         TypeCastException(
             when (value.inner) {
                 null -> "failed cast from null to $targetType"
