@@ -74,6 +74,7 @@ class Scanner(
                     addToken(SLASH)
                 }
             }
+            ':' -> atomOrColon()
             in SYMBOL_DOUBLE -> {
                 for (tokenType in SYMBOL_DOUBLE[char]!!)
                     if (match(tokenType.second!!)) {
@@ -89,7 +90,6 @@ class Scanner(
             '"' -> string()
             in DIGITS -> number()
             in ALPHA -> identifier()
-            ':' -> atom()
             else -> throw error("unexpected char", previous = true)
         }
     }
@@ -127,8 +127,11 @@ class Scanner(
         addToken(STRING, literal)
     }
 
-    private fun atom() {
-        if (curChar !in ALPHA) throw error("first char of atom must be letter")
+    private fun atomOrColon() {
+        if (curChar !in ALPHA) {
+            addToken(COLON)
+            return
+        }
         while (curChar in ALPHANUM) advance()
         val literal = source.slice(start + 1 until current) // omit colon
         addToken(ATOM, literal)

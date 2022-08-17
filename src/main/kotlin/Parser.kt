@@ -5,7 +5,7 @@ class Parser(private val tokens: List<Token>) {
         token: Token,
         message: String = "",
         where: String = "",
-    ) : Exception("[line ${token.pos}$where] $message, got $token")
+    ) : Exception("[pos ${token.pos}$where] $message, got '${token.lexeme}'")
 
     private var current = 0
 
@@ -18,7 +18,7 @@ class Parser(private val tokens: List<Token>) {
     private fun program(): Program {
         val stmts = ArrayList<Stmt>()
         while (!isAtEnd) {
-            if (match(SEMICOLON))
+            if (matchAndConsume(SEMICOLON))
                 continue
             stmts.add(declaration())
         }
@@ -26,45 +26,45 @@ class Parser(private val tokens: List<Token>) {
     }
 
     private fun declaration(): Stmt = when {
-        match(LET) -> variableDecl()
-        match(FUN) -> functionDef()
+        matchAndConsume(LET) -> variableDecl()
+        matchAndConsume(FUN) -> functionDef()
         else -> statement()
     }
 
     private fun variableDecl(): Stmt.VariableDecl {
         val name = ident(" to start variable declaration")
-        val init = if (match(EQUAL)) expression() else null
-        val emitValue = !match(SEMICOLON)
+        val init = if (matchAndConsume(EQUAL)) expression() else null
+        val emitValue = !matchAndConsume(SEMICOLON)
         return Stmt.VariableDecl(name, init, emitValue)
     }
 
     private fun functionDef(): Stmt.FunctionDef {
         val name = ident(" after keyword 'fun'")
-        consume(LEFT_PAREN, "expected '(' after function name")
-        val parameters = commaList(::ident, "parameter", RIGHT_PAREN)
-        consume(LEFT_CURLY, "expected '{' after function signature")
+        consume(LEFT_PAREN, " after function name")
+        val parameters = commaList(::ident, RIGHT_PAREN, "param list")
+        consume(LEFT_CURLY, " after function signature")
         val body = block()
         return Stmt.FunctionDef(name, parameters, body)
     }
 
     private fun statement(): Stmt {
         val blockStmt = when {
-            match(LEFT_CURLY) -> block()
-            match(IF) -> ifStmt()
-            match(FOR) -> forStmt()
-            match(WHILE) -> whileStmt()
-            match(MATCH) -> matchStmt()
+            matchAndConsume(LEFT_CURLY) -> block()
+            matchAndConsume(IF) -> ifStmt()
+            matchAndConsume(FOR) -> forInStmt()
+            matchAndConsume(WHILE) -> whileStmt()
+            matchAndConsume(MATCH) -> matchStmt()
             else -> null
         }
         if (blockStmt != null)
             return blockStmt
         val lineStmt = when {
-            match(RETURN) -> Stmt.Return(if (check(SEMICOLON)) null else expression())
-            match(BREAK) -> Stmt.Break()
+            matchAndConsume(RETURN) -> Stmt.Return(if (check(SEMICOLON)) null else expression())
+            matchAndConsume(BREAK) -> Stmt.Break()
             else -> null
         }
         if (lineStmt != null) {
-            consume(SEMICOLON, "expected ';' at end of statement")
+            consume(SEMICOLON, " at end of statement")
             return lineStmt
         }
         return exprStmt()
@@ -72,71 +72,57 @@ class Parser(private val tokens: List<Token>) {
 
     private fun matchStmt(): Stmt.Match {
         val expr = expression()
-        consume(LEFT_CURLY, "expected '${LEFT_CURLY.match}' after match expression")
-        val clauses = commaList(::matchClause, "match clause", RIGHT_CURLY)
+        consume(LEFT_CURLY, " after match expression")
+        val clauses = commaList(::matchClause, RIGHT_CURLY, "match statement")
         return Stmt.Match(expr, clauses)
     }
 
     private fun matchClause(): MatchClause {
         val pattern = pattern()
-        consume(RIGHT_ARROW, "expected '${RIGHT_ARROW.match}' after match pattern")
+        consume(RIGHT_ARROW, " after match pattern")
         val body = statement()
         return MatchClause(pattern, body)
     }
 
     private fun pattern(): MatchPattern = when {
-        check(TokenType.Literals) -> MatchPattern.Literal(literal())
-        check(IDENTIFIER) -> MatchPattern.Anything(ident())
-        match(ELSE) -> MatchPattern.Anything(null)
-        else -> throw error("illegal match pattern")
-    }
-
-    private fun forStmt(): Stmt {
-        if (check(IDENTIFIER) && check(IN, offset = 1))
-            return forInStmt()
-        val init = when {
-            check(LEFT_CURLY) -> null
-            match(SEMICOLON) -> null
-            match(LET) -> variableDecl()
-            else -> exprStmt(expectSemicolon = "expected ';' after for init clause")
-        }
-        val condition = when {
-            check(LEFT_CURLY) -> null
-            match(SEMICOLON) -> null
-            else -> exprStmt(expectSemicolon = "expected ';' after for condition clause").expr
-        }
-        val update = when {
-            check(LEFT_CURLY) -> null
-            else -> expression()
-        }
-        consume(LEFT_CURLY, "expected '{' after for clauses")
-        val body = block()
-        return Stmt.For(init, condition, update, body)
+        check(TokenType.Literals) ->
+            MatchPattern.Literal(literal())
+        check(IDENTIFIER) ->
+            MatchPattern.Anything(ident())
+        matchAndConsume(ELSE) ->
+            MatchPattern.Anything(null)
+        else ->
+            throw error("illegal match pattern")
     }
 
     private fun forInStmt(): Stmt.ForIn {
-        val variable = ident()
-        consume(IN)
-        val iterable = expression()
-        consume(LEFT_CURLY, "expected '{' after for..in iterator")
+        val iterator = when {
+            check(IDENTIFIER) -> variable()
+            check(LEFT_PAREN) -> fullTuple()
+            else -> throw error("iterator must either be single variable or tuple")
+        }
+        consume(IN, " after for..in iterator")
+        val iteratee = expression()
+        consume(LEFT_CURLY, " after for..in initializer")
         val body = block()
-        return Stmt.ForIn(variable, iterable, body)
+        return Stmt.ForIn(iterator, iteratee, body)
     }
+
 
     private fun whileStmt(): Stmt.While {
         val condition = expression()
-        consume(LEFT_CURLY, "expected '{' after while condition")
+        consume(LEFT_CURLY, " after while condition")
         val body = block()
         return Stmt.While(condition, body)
     }
 
     private fun ifStmt(): Stmt.If {
         val condition = expression()
-        consume(LEFT_CURLY, "expected '{' after if-condition")
+        consume(LEFT_CURLY, " after if-condition")
         val ifBody = block()
         var elseBody: Stmt.Block? = null
-        if (match(ELSE)) {
-            consume(LEFT_CURLY, "expected '{' after else")
+        if (matchAndConsume(ELSE)) {
+            consume(LEFT_CURLY, " after else")
             elseBody = block()
         }
         return Stmt.If(condition, ifBody, elseBody)
@@ -146,14 +132,14 @@ class Parser(private val tokens: List<Token>) {
         val stmts = ArrayList<Stmt>()
         while (!check(RIGHT_CURLY) && !isAtEnd)
             stmts.add(declaration())
-        consume(RIGHT_CURLY, "expected '}' after block")
+        consume(RIGHT_CURLY, " after block")
         return Stmt.Block(stmts)
     }
 
     private fun exprStmt(expectSemicolon: String? = null) =
         Stmt.ExprStmt(
             expression(), emitValue = when (expectSemicolon) {
-                null -> !match(SEMICOLON)
+                null -> !matchAndConsume(SEMICOLON)
                 else -> {
                     consume(SEMICOLON, expectSemicolon)
                     false
@@ -168,7 +154,7 @@ class Parser(private val tokens: List<Token>) {
     private fun assignment(): Expr {
         val target = or()
 
-        if (match(TokenType.Assignment)) {
+        if (matchAndConsume(TokenType.Assignment)) {
             val operator = prevToken
             val value = assignment()
             if (target !is Expr.Variable && target !is Expr.Access)
@@ -179,10 +165,10 @@ class Parser(private val tokens: List<Token>) {
         return target
     }
 
-    private fun parseLeftAssoc(nextRule: () -> Expr, vararg tokenTypes: TokenType): Expr {
+    private fun binaryLeftAssoc(nextRule: () -> Expr, vararg tokenTypes: TokenType): Expr {
         var expr = nextRule()
 
-        while (match(*tokenTypes)) {
+        while (matchAndConsume(*tokenTypes)) {
             val operator = prevToken
             val right = nextRule()
             expr = Expr.Binary(expr, operator, right)
@@ -192,38 +178,49 @@ class Parser(private val tokens: List<Token>) {
     }
 
     private fun or() =
-        parseLeftAssoc(::and, OR)
+        binaryLeftAssoc(::and, OR)
 
     private fun and() =
-        parseLeftAssoc(::equality, AND)
+        binaryLeftAssoc(::equality, AND)
 
     private fun equality() =
-        parseLeftAssoc(::comparison, EQUAL_EQUAL, BANG_EQUAL)
+        binaryLeftAssoc(::comparison, EQUAL_EQUAL, BANG_EQUAL)
 
     private fun comparison() =
-        parseLeftAssoc(::term, GREATER, GREATER_EQUAL, LESS, LESS_EQUAL)
+        binaryLeftAssoc(::term, GREATER, GREATER_EQUAL, LESS, LESS_EQUAL)
 
     private fun term() =
-        parseLeftAssoc(::factor, MINUS, PLUS)
+        binaryLeftAssoc(::factor, MINUS, PLUS)
 
     private fun factor() =
-        parseLeftAssoc(::unary, SLASH, STAR)
+        binaryLeftAssoc(::unary, SLASH, STAR)
 
     private fun unary(): Expr {
-        if (match(BANG, MINUS)) {
+        if (matchAndConsume(BANG, MINUS)) {
             val operator = prevToken
             val right = unary()
             return Expr.Unary(operator, right)
         }
 
-        return call()
+        return range()
+    }
+
+    private fun range(): Expr {
+        val start = call()
+
+        if (matchAndConsume(DOT_DOT)) {
+            val end = call()
+            return Expr.Range(start, end)
+        }
+
+        return start
     }
 
     private fun call(): Expr {
         val expr = access()
 
-        if (match(LEFT_PAREN)) {
-            val arguments = commaList(::expression, "argument", RIGHT_PAREN)
+        if (matchAndConsume(LEFT_PAREN)) {
+            val arguments = commaList(::expression, RIGHT_PAREN, "arg list")
             return Expr.Call(expr, arguments)
         }
 
@@ -233,7 +230,7 @@ class Parser(private val tokens: List<Token>) {
     private fun access(): Expr {
         var expr = primary()
 
-        while (match(DOT)) {
+        while (matchAndConsume(DOT)) {
             val field = ident()
             expr = Expr.Access(expr, field)
         }
@@ -241,68 +238,100 @@ class Parser(private val tokens: List<Token>) {
         return expr
     }
 
-    private fun <T> commaList(itemFunc: () -> T, itemName: String, ender: TokenType): ArrayList<T> {
-        val list = ArrayList<T>()
-        while (!match(ender)) {
-            val item = itemFunc()
-            list.add(item)
-            if (!check(ender))
-                consume(COMMA, "expected ',' after $itemName")
+    private fun <T> commaList(
+        itemFunc: () -> T,
+        ender: TokenType,
+        listName: String,
+    ): ArrayList<T> {
+        val items = ArrayList<T>()
+        if (matchAndConsume(ender))
+            return items
+        while (true) {
+            items.add(itemFunc())
+            if (matchAndConsume(COMMA)) {
+                if (matchAndConsume(ender)) break
+            } else {
+                consume(ender, " at end of $listName")
+                break
+            }
         }
-        if (list.isNotEmpty())
-            match(COMMA) // optional trailing comma
-        return list
+        return items
     }
 
     private fun literal(): Expr.Literal = when {
-        match(FALSE) ->
+        matchAndConsume(FALSE) ->
             Expr.Literal(false)
-        match(TRUE) ->
+        matchAndConsume(TRUE) ->
             Expr.Literal(true)
-        match(NIL) ->
+        matchAndConsume(NIL) ->
             Expr.Literal(null)
-        match(NUMBER, STRING) ->
+        matchAndConsume(STRING, NUMBER) ->
             Expr.Literal(prevToken.literal)
-        match(ATOM) ->
+        matchAndConsume(ATOM) ->
             Expr.Literal(Atom(prevToken.literal as String))
-        match(LEFT_SQUARE) ->
+        matchAndConsume(LEFT_SQUARE) ->
             collectionLiteral()
         else -> throw error("expected literal")
     }
 
     private fun collectionLiteral(): Expr.Literal = when {
         check(IDENTIFIER) && check(COLON, offset = 1) -> {
-            val entryList = commaList(::dictionaryEntry, "dictionary entry", RIGHT_SQUARE)
+            val entryList = commaList(::dictionaryEntry, RIGHT_SQUARE, "dictionary")
             Expr.Literal(hashMapOf(*entryList.toTypedArray()))
         }
-        match(COLON) && match(RIGHT_SQUARE) ->
+        matchAndConsume(COLON) && matchAndConsume(RIGHT_SQUARE) ->
             Expr.Literal(hashMapOf<String, Expr>())
         else ->
-            Expr.Literal(commaList(::expression, "array item", RIGHT_SQUARE))
+            Expr.Literal(commaList(::expression, RIGHT_SQUARE, "array"))
     }
 
     private fun dictionaryEntry(): Pair<String, Expr> {
         val key = ident(" for dictionary key")
-        consume(COLON, "expected '${COLON.match}' after dictionary key")
+        consume(COLON, " after dictionary key")
         val value = expression()
         return Pair(key.name, value)
     }
 
     private fun primary() = when {
         check(TokenType.Literals) -> literal()
-        match(LEFT_PAREN) -> {
-            val expression = expression()
-            consume(RIGHT_PAREN, "parentheses not balanced")
-            Expr.Grouping(expression)
-        }
-        check(IDENTIFIER) -> Expr.Variable(ident())
+        check(IDENTIFIER) -> variable()
+        matchAndConsume(LEFT_PAREN) -> parenExpr()
         else -> throw error("expected primary expression")
     }
 
+    private fun parenExpr(): Expr {
+        if (matchAndConsume(RIGHT_PAREN))
+            return Expr.Tuple(listOf())
+        val expression = expression()
+        return when {
+            check(COMMA) -> tuple(expression)
+            else -> {
+                consume(RIGHT_PAREN, " after grouping expression")
+                Expr.Grouping(expression)
+            }
+        }
+    }
+
+    private fun variable() = Expr.Variable(ident())
+
     private fun ident(where: String = "") =
-        if (match(IDENTIFIER)) Ident(prevToken.lexeme)
+        if (matchAndConsume(IDENTIFIER)) Ident(prevToken.lexeme)
         else throw error("expected identifier$where")
 
+    private fun fullTuple(): Expr.Tuple {
+        consume(LEFT_PAREN, " at tuple start")
+        return tuple(expression())
+    }
+
+    private fun tuple(firstItem: Expr): Expr.Tuple {
+        consume(COMMA, " after first item in tuple")
+        val elements = listOf(firstItem) + commaList(
+            ::expression,
+            ender = RIGHT_PAREN,
+            listName = "tuple",
+        )
+        return Expr.Tuple(elements)
+    }
 
     private fun check(type: TokenType, offset: Int = 0) = check(setOf(type), offset)
 
@@ -310,23 +339,27 @@ class Parser(private val tokens: List<Token>) {
         !isAtEnd && tokens.getOrNull(current + offset)?.type in types
 
     private fun advance(): Token {
-        if (!isAtEnd) current++
+        if (!isAtEnd) increment()
         return prevToken
     }
 
-    private fun match(vararg types: TokenType): Boolean = match(types.toSet())
+    private fun matchAndConsume(vararg types: TokenType): Boolean = matchAndConsume(types.toSet())
 
-    private fun match(types: Set<TokenType>): Boolean = when (curToken.type) {
+    private fun matchAndConsume(types: Set<TokenType>): Boolean = when (curToken.type) {
         in types -> {
-            current++
+            increment()
             true
         }
         else -> false
     }
 
-    private fun consume(type: TokenType, message: String? = null): Token {
+    private fun increment() {
+        current++
+    }
+
+    private fun consume(type: TokenType, where: String = ""): Token {
         if (check(type)) return advance()
-        throw error(message ?: "")
+        throw error("expected '${type.match}'$where")
     }
 
     private fun error(message: String): ParseError {

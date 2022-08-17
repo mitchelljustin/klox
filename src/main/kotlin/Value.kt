@@ -16,6 +16,7 @@ open class Value(val inner: Any?, val type: Type) {
         Callable,
         Atom,
         List,
+        Range,
         Dictionary,
         Nil,
     }
@@ -27,6 +28,9 @@ open class Value(val inner: Any?, val type: Type) {
 
         @Suppress("FunctionName")
         fun Atom(name: String) = Value(BareAtom(name), Type.Atom)
+
+        @Suppress("FunctionName")
+        fun Range(start: Value, end: Value) = Value(Pair(start, end), Type.Range)
     }
 
     constructor(inner: Any?) : this(
@@ -34,11 +38,12 @@ open class Value(val inner: Any?, val type: Type) {
             is Value -> inner.inner
             is ArrayList<*> -> inner.map(::Value)
             is HashMap<*, *> -> inner.entries.associate { (k, v) -> (k as String) to Value(v) }
+            is Int -> inner.toDouble()
             else -> inner
         },
         when (inner) {
             is String -> Type.String
-            is Double -> Type.Double
+            is Double, is Int -> Type.Double
             is Boolean -> Type.Boolean
             is BareAtom -> Type.Atom
             is Function<*>, is Callable -> Type.Callable
@@ -54,7 +59,9 @@ open class Value(val inner: Any?, val type: Type) {
     val isString get() = type == Type.String
     val isList get() = type == Type.List
     val isDictionary get() = type == Type.Dictionary
+    val isRange get() = type == Type.Range
     val isDouble get() = type == Type.Double
+    val isInt get() = isDouble && inner is Double && inner - inner.toInt() == 0.0
     val isBoolean get() = type == Type.Boolean
     val isAtom get() = type == Type.Atom
     val isCallable get() = type == Type.Callable
@@ -73,7 +80,10 @@ open class Value(val inner: Any?, val type: Type) {
         else -> throw CastException(this, T::class.simpleName ?: "unknown")
     }
 
+    fun intoList() = into<List<Value>>()
     fun intoDictionary() = into<HashMap<String, Value>>()
+    fun intoPair() = into<Pair<Value, Value>>()
+    fun intoInt() = into<Double>().toInt()
 
     override operator fun equals(other: Any?) = when (other) {
         is Value -> when {
@@ -85,9 +95,7 @@ open class Value(val inner: Any?, val type: Type) {
     }
 
     override fun toString() = when {
-        inner is Double && inner - inner.toInt() == 0.0 ->
-            inner.toInt().toString()
-        isString -> "\"$inner\""
+        isInt -> intoInt().toString()
         isDictionary && inner is HashMap<*, *> -> {
             var kvs = inner
                 .map { (k, v) -> "$k: $v" }
@@ -95,6 +103,7 @@ open class Value(val inner: Any?, val type: Type) {
             if (kvs.isEmpty()) kvs = ":"
             "[$kvs]"
         }
+        isRange && inner is Pair<*, *> -> "${inner.first}..${inner.second}"
         else -> inner.toString()
     }
 

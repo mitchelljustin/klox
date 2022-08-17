@@ -2,6 +2,7 @@ enum class TokenType(val match: String? = null) {
     LEFT_PAREN("("), RIGHT_PAREN(")"), LEFT_CURLY("{"), RIGHT_CURLY("}"),
     LEFT_SQUARE("["), RIGHT_SQUARE("]"),
     COMMA(","), DOT("."), SEMICOLON(";"), COLON(":"),
+    DOT_DOT(".."),
     MINUS("-"), PLUS("+"), SLASH("/"), STAR("*"),
     MINUS_EQUAL("-="), PLUS_EQUAL("+="), SLASH_EQUAL("/="), STAR_EQUAL("*="),
 
@@ -34,6 +35,16 @@ enum class TokenType(val match: String? = null) {
     val isKeyword: Boolean get() = match != null && match.length > 1 && match.startsWith(":")
     val first: Char? get() = match?.first()
     val second: Char? get() = match?.get(1)
+    val opposing: TokenType?
+        get() = when (this) {
+            LEFT_PAREN -> RIGHT_PAREN
+            RIGHT_PAREN -> LEFT_PAREN
+            LEFT_CURLY -> RIGHT_CURLY
+            RIGHT_CURLY -> LEFT_CURLY
+            LEFT_SQUARE -> RIGHT_SQUARE
+            RIGHT_SQUARE -> LEFT_SQUARE
+            else -> null
+        }
 }
 
 data class Pos(val line: Int, val col: Int) {

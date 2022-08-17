@@ -28,9 +28,7 @@ abstract class Stmt : AST() {
 
     data class While(val condition: Expr, val body: Block) : Stmt()
 
-    data class For(val init: Stmt?, val condition: Expr?, val update: Expr?, val body: Block) : Stmt()
-
-    data class ForIn(val iterator: Ident, val iteratee: Expr, val body: Block) : Stmt()
+    data class ForIn(val iterator: Expr, val iteratee: Expr, val body: Block) : Stmt()
 
     data class Match(val expr: Expr, val clauses: List<MatchClause>) : Stmt()
 
@@ -56,19 +54,20 @@ abstract class Expr : AST() {
 
     data class Access(val target: Expr, val member: Ident) : Expr()
 
+    data class Tuple(val elements: List<Expr>) : Expr()
+
+    data class Range(val start: Expr, val end: Expr) : Expr()
+
     class Literal(val value: Any?) : Expr() {
-        override fun toString() = when (value) {
-            is String -> "\"$value\""
-
-            is Double,
-            is Atom,
-            is List<*>,
-            is HashMap<*, *>,
-            true, false, null,
-            ->
-                value.toString()
-
-            else -> "?"
+        override fun toString() = buildString {
+            append("Literal(")
+            append(
+                when (value) {
+                    is String -> "\"$value\""
+                    else -> value.toString()
+                }
+            )
+            append(")")
         }
     }
 }

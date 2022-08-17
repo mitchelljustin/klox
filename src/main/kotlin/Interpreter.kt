@@ -70,7 +70,6 @@ class Interpreter {
             is Stmt.VariableDecl -> execVariableDecl(stmt)
             is Stmt.FunctionDef -> execFunctionDef(stmt)
             is Stmt.If -> execIf(stmt)
-            is Stmt.For -> execFor(stmt)
             is Stmt.ForIn -> execForIn(stmt)
             is Stmt.Match -> execMatch(stmt)
             is Stmt.While -> execWhile(stmt)
@@ -78,7 +77,7 @@ class Interpreter {
             is Stmt.Return -> execReturn(stmt)
             is Stmt.ExprStmt -> execExprStmt(stmt)
             else ->
-                throw RuntimeError("unknown stmt type", stmt)
+                throw RuntimeError("illegal stmt type", stmt)
         }
         return lastValue
     }
@@ -134,21 +133,6 @@ class Interpreter {
         }
     }
 
-    private fun execFor(stmt: Stmt.For): Value {
-        contextPush()
-        if (stmt.init != null) exec(stmt.init)
-        while (stmt.condition == null || eval(stmt.condition).isTruthy) {
-            try {
-                execBlock(stmt.body)
-            } catch (_: Break) {
-                break
-            }
-            if (stmt.update != null) eval(stmt.update)
-        }
-        contextPop()
-        return Value.Nil
-    }
-
     private fun execReturn(stmt: Stmt.Return): Value {
         if (ctx.enclosingFunction == null)
             throw RuntimeError("returning outside of a function")
@@ -172,13 +156,54 @@ class Interpreter {
 
     private fun execForIn(stmt: Stmt.ForIn): Value {
         val ctx = contextPush()
-        val iterator = stmt.iterator.name
-        ctx.define(iterator)
+        val iterator: List<String> = when (stmt.iterator) {
+            is Expr.Variable -> listOf(stmt.iterator.target.name)
+            is Expr.Tuple -> stmt.iterator.elements.map { (it as Expr.Variable).target.name }
+            else -> throw RuntimeError("unsupported iterator type, check your parser")
+        }
+        iterator.forEach { ctx.define(it) }
         val iteratee = eval(stmt.iteratee)
         when (iteratee.type) {
+            Value.Type.Range -> {
+                val (start, end) = iteratee.intoPair()
+                if (!start.isInt || !end.isInt)
+                    throw RuntimeError("range components must be integers")
+                if (iterator.size != 1)
+                    throw RuntimeError("range iterator can only have a single variable")
+                val range = start.intoInt() until end.intoInt()
+                for (i in range) {
+                    ctx.assign(iterator.first(), Value(i))
+                    try {
+                        execBlock(stmt.body)
+                    } catch (_: Break) {
+                        break
+                    }
+                }
+            }
             Value.Type.List -> {
-                for (item in iteratee.into<List<Value>>()) {
-                    ctx.assign(iterator, item)
+                for (item in iteratee.intoList()) {
+                    when {
+                        item.isList && iterator.size == item.intoList().size ->
+                            iterator
+                                .zip(item.intoList())
+                                .forEach { (name, element) -> ctx.assign(name, element) }
+                        iterator.size == 1 ->
+                            ctx.assign(iterator.first(), item)
+                        else ->
+                            throw RuntimeError("wrong number of iterator bindings")
+                    }
+                    try {
+                        execBlock(stmt.body)
+                    } catch (_: Break) {
+                        break
+                    }
+                }
+            }
+            Value.Type.Dictionary -> {
+                for ((k, v) in iteratee.intoDictionary()) {
+                    if (iterator.size != 2) throw RuntimeError("need (k,v) tuple as iterator for dictionary")
+                    ctx.assign(iterator[0], Value(k))
+                    ctx.assign(iterator[1], v)
                     try {
                         execBlock(stmt.body)
                     } catch (_: Break) {
@@ -201,6 +226,7 @@ class Interpreter {
 
     private fun eval(expr: Expr): Value = when (expr) {
         is Expr.Literal -> evalLiteral(expr)
+        is Expr.Range -> evalRange(expr)
         is Expr.Binary -> evalBinaryExpr(expr)
         is Expr.Unary -> evalUnaryExpr(expr)
         is Expr.Grouping -> eval(expr.expression)
@@ -208,8 +234,10 @@ class Interpreter {
         is Expr.Call -> evalCall(expr)
         is Expr.Assignment -> evalAssignment(expr)
         is Expr.Access -> evalAccess(expr)
-        else -> throw RuntimeError("unknown expr type", expr)
+        else -> throw RuntimeError("illegal expr type", expr)
     }
+
+    private fun evalRange(expr: Expr.Range) = Value.Range(eval(expr.start), eval(expr.end))
 
     private fun evalVariable(expr: Expr.Variable) = ctx.resolve(expr.target.name)
 
