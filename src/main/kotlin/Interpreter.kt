@@ -64,14 +64,11 @@ class Interpreter {
         ctx = ctx.enclosing!!
     }
 
-    private fun exec(stmt: Stmt): Value {
-        lastValue = when (stmt) {
-            is Stmt.Block -> execBlock(stmt)
+    private fun exec(stmt: Stmt) {
+        when (stmt) {
             is Stmt.VariableDecl -> execVariableDecl(stmt)
             is Stmt.FunctionDef -> execFunctionDef(stmt)
-            is Stmt.If -> execIf(stmt)
             is Stmt.ForIn -> execForIn(stmt)
-            is Stmt.Match -> execMatch(stmt)
             is Stmt.While -> execWhile(stmt)
             is Stmt.Break -> throw Break()
             is Stmt.Return -> execReturn(stmt)
@@ -79,15 +76,14 @@ class Interpreter {
             else ->
                 throw RuntimeError("illegal stmt type", stmt)
         }
-        return lastValue
     }
 
-    private fun execMatch(stmt: Stmt.Match): Value {
-        val value = eval(stmt.expr)
-        for (clause in stmt.clauses) {
+    private fun evalMatch(expr: Expr.Match): Value {
+        val value = eval(expr.target)
+        for (clause in expr.clauses) {
             val ctx = matchesPattern(value, clause.pattern)
             if (ctx != null) {
-                val result = exec(clause.body)
+                val result = execExprStmt(clause.body)
                 contextPop()
                 return result
             }
@@ -109,26 +105,25 @@ class Interpreter {
     }
 
     private fun execExprStmt(stmt: Stmt.ExprStmt): Value {
-        val value = eval(stmt.expr)
-        return if (stmt.emitValue) value else Value.Nil
+        lastValue = if (stmt.emitValue) eval(stmt.expr) else Value.Nil
+        return lastValue
     }
 
     private fun execFunctionDef(stmt: Stmt.FunctionDef) = ctx.define(stmt.name.name, Value(Callable.FunctionDef(stmt)))
 
-    private fun execVariableDecl(stmt: Stmt.VariableDecl): Value {
+    private fun execVariableDecl(stmt: Stmt.VariableDecl) {
         val value = if (stmt.init != null) eval(stmt.init) else Value.Nil
         val name = stmt.name.name
         ctx.define(name, value)
-        return if (stmt.emitValue) value else Value.Nil
     }
 
-    private fun execIf(stmt: Stmt.If): Value {
+    private fun evalIf(stmt: Expr.If): Value {
         val condition = eval(stmt.condition)
         return when {
             condition.isTruthy ->
-                execBlock(stmt.ifBody)
+                evalBlock(stmt.ifBody)
             stmt.elseBody != null ->
-                execBlock(stmt.elseBody)
+                evalBlock(stmt.elseBody)
             else -> Value.Nil
         }
     }
@@ -146,7 +141,7 @@ class Interpreter {
     private fun execWhile(stmt: Stmt.While): Value {
         while (eval(stmt.condition).isTruthy) {
             try {
-                execBlock(stmt.body)
+                evalBlock(stmt.body)
             } catch (_: Break) {
                 break
             }
@@ -174,7 +169,7 @@ class Interpreter {
                 for (i in range) {
                     ctx.assign(iterator.first(), Value(i))
                     try {
-                        execBlock(stmt.body)
+                        evalBlock(stmt.body)
                     } catch (_: Break) {
                         break
                     }
@@ -190,10 +185,10 @@ class Interpreter {
                         iterator.size == 1 ->
                             ctx.assign(iterator.first(), item)
                         else ->
-                            throw RuntimeError("wrong number of iterator bindings")
+                            throw RuntimeError("wrong number of variables")
                     }
                     try {
-                        execBlock(stmt.body)
+                        evalBlock(stmt.body)
                     } catch (_: Break) {
                         break
                     }
@@ -205,7 +200,7 @@ class Interpreter {
                     ctx.assign(iterator[0], Value(k))
                     ctx.assign(iterator[1], v)
                     try {
-                        execBlock(stmt.body)
+                        evalBlock(stmt.body)
                     } catch (_: Break) {
                         break
                     }
@@ -217,7 +212,7 @@ class Interpreter {
         return Value.Nil
     }
 
-    private fun execBlock(stmt: Stmt.Block): Value {
+    private fun evalBlock(stmt: Expr.Block): Value {
         contextPush()
         val result = execSequence(stmt.stmts)
         contextPop()
@@ -234,6 +229,9 @@ class Interpreter {
         is Expr.Call -> evalCall(expr)
         is Expr.Assignment -> evalAssignment(expr)
         is Expr.Access -> evalAccess(expr)
+        is Expr.Block -> evalBlock(expr)
+        is Expr.If -> evalIf(expr)
+        is Expr.Match -> evalMatch(expr)
         else -> throw RuntimeError("illegal expr type", expr)
     }
 
@@ -308,7 +306,7 @@ class Interpreter {
             val ctx = contextPush(function = callee)
             for ((param, arg) in callee.def.parameters.zip(arguments))
                 ctx.define(param.name, arg)
-            val result = execBlock(callee.def.body)
+            val result = evalBlock(callee.def.body)
             if (ctx === this.ctx) // implicit return at end of function call
                 contextPop()
             result

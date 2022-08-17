@@ -1,0 +1,10 @@
+let s = 3
+
+let j = match s {
+    1 -> 3,
+    4 -> true,
+    else -> nil
+}
+
+
+print(j)

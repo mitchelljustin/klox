@@ -1,0 +1,53 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "klox",
+  "patterns": [
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    }
+  ],
+  "repository": {
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.klox",
+          "match": "\\b(class|else|fun|for|if|return|super|this|let|while|match|break|in)\\b"
+        },
+        {
+          "name": "keyword.operator",
+          "match": "(\\+=?|\\-=?|\\/=?|\\*=?|or|and|==|!=|\\.\\.|<|>|<=|>=|->)"
+        },
+        {
+          "name": "constant.language",
+          "match": "\\b(true|false|nil)\\b"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.klox",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.klox",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric",
+          "match": "\\b\\d+(\\.\\d+)?\\b"
+        }
+      ]
+    }
+  },
+  "scopeName": "source.klox"
+}

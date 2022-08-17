@@ -34,8 +34,8 @@ class Parser(private val tokens: List<Token>) {
     private fun variableDecl(): Stmt.VariableDecl {
         val name = ident(" to start variable declaration")
         val init = if (matchAndConsume(EQUAL)) expression() else null
-        val emitValue = !matchAndConsume(SEMICOLON)
-        return Stmt.VariableDecl(name, init, emitValue)
+        consume(SEMICOLON, " after variable declaration")
+        return Stmt.VariableDecl(name, init)
     }
 
     private fun functionDef(): Stmt.FunctionDef {
@@ -49,11 +49,8 @@ class Parser(private val tokens: List<Token>) {
 
     private fun statement(): Stmt {
         val blockStmt = when {
-            matchAndConsume(LEFT_CURLY) -> block()
-            matchAndConsume(IF) -> ifStmt()
             matchAndConsume(FOR) -> forInStmt()
             matchAndConsume(WHILE) -> whileStmt()
-            matchAndConsume(MATCH) -> matchStmt()
             else -> null
         }
         if (blockStmt != null)
@@ -70,17 +67,17 @@ class Parser(private val tokens: List<Token>) {
         return exprStmt()
     }
 
-    private fun matchStmt(): Stmt.Match {
+    private fun matchExpr(): Expr.Match {
         val expr = expression()
         consume(LEFT_CURLY, " after match expression")
         val clauses = commaList(::matchClause, RIGHT_CURLY, "match statement")
-        return Stmt.Match(expr, clauses)
+        return Expr.Match(expr, clauses)
     }
 
     private fun matchClause(): MatchClause {
         val pattern = pattern()
         consume(RIGHT_ARROW, " after match pattern")
-        val body = statement()
+        val body = exprStmt()
         return MatchClause(pattern, body)
     }
 
@@ -116,40 +113,39 @@ class Parser(private val tokens: List<Token>) {
         return Stmt.While(condition, body)
     }
 
-    private fun ifStmt(): Stmt.If {
+    private fun ifExpr(): Expr.If {
         val condition = expression()
         consume(LEFT_CURLY, " after if-condition")
         val ifBody = block()
-        var elseBody: Stmt.Block? = null
+        var elseBody: Expr.Block? = null
         if (matchAndConsume(ELSE)) {
             consume(LEFT_CURLY, " after else")
             elseBody = block()
         }
-        return Stmt.If(condition, ifBody, elseBody)
+        return Expr.If(condition, ifBody, elseBody)
     }
 
-    private fun block(): Stmt.Block {
+    private fun block(): Expr.Block {
         val stmts = ArrayList<Stmt>()
         while (!check(RIGHT_CURLY) && !isAtEnd)
             stmts.add(declaration())
         consume(RIGHT_CURLY, " after block")
-        return Stmt.Block(stmts)
+        return Expr.Block(stmts)
     }
 
-    private fun exprStmt(expectSemicolon: String? = null) =
+    private fun exprStmt() =
         Stmt.ExprStmt(
-            expression(), emitValue = when (expectSemicolon) {
-                null -> !matchAndConsume(SEMICOLON)
-                else -> {
-                    consume(SEMICOLON, expectSemicolon)
-                    false
-                }
-            }
+            expression(),
+            emitValue = !matchAndConsume(SEMICOLON)
         )
 
 
-    private fun expression() =
-        assignment()
+    private fun expression() = when {
+        matchAndConsume(LEFT_CURLY) -> block()
+        matchAndConsume(IF) -> ifExpr()
+        matchAndConsume(MATCH) -> matchExpr()
+        else -> assignment()
+    }
 
     private fun assignment(): Expr {
         val target = or()

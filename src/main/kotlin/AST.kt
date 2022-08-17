@@ -12,10 +12,6 @@ class Program(val stmts: List<Stmt>) : AST() {
 }
 
 abstract class Stmt : AST() {
-    class Block(val stmts: List<Stmt>) : Stmt() {
-        override fun toString() = "Block(${listToString(stmts)})"
-    }
-
     data class ExprStmt(val expr: Expr, val emitValue: Boolean) : Stmt()
 
     data class Return(val retVal: Expr?) : Stmt()
@@ -24,20 +20,24 @@ abstract class Stmt : AST() {
         override fun toString() = "Break()"
     }
 
-    data class If(val condition: Expr, val ifBody: Block, val elseBody: Block?) : Stmt()
+    data class While(val condition: Expr, val body: Expr.Block) : Stmt()
 
-    data class While(val condition: Expr, val body: Block) : Stmt()
+    data class ForIn(val iterator: Expr, val iteratee: Expr, val body: Expr.Block) : Stmt()
 
-    data class ForIn(val iterator: Expr, val iteratee: Expr, val body: Block) : Stmt()
+    data class VariableDecl(val name: Ident, val init: Expr?) : Stmt()
 
-    data class Match(val expr: Expr, val clauses: List<MatchClause>) : Stmt()
-
-    data class VariableDecl(val name: Ident, val init: Expr?, val emitValue: Boolean) : Stmt()
-
-    data class FunctionDef(val name: Ident, val parameters: List<Ident>, val body: Block) : Stmt()
+    data class FunctionDef(val name: Ident, val parameters: List<Ident>, val body: Expr.Block) : Stmt()
 }
 
 abstract class Expr : AST() {
+    class Block(val stmts: List<Stmt>) : Expr() {
+        override fun toString() = "Block(${listToString(stmts)})"
+    }
+
+    data class If(val condition: Expr, val ifBody: Block, val elseBody: Block?) : Expr()
+
+    data class Match(val target: Expr, val clauses: List<MatchClause>) : Expr()
+
     data class Binary(val left: Expr, val operator: Token, val right: Expr) : Expr()
 
     data class Grouping(val expression: Expr) : Expr()
@@ -76,8 +76,7 @@ data class Ident(val name: String) : AST() {
     override fun toString() = "Ident($name)"
 }
 
-
-data class MatchClause(val pattern: MatchPattern, val body: Stmt)
+data class MatchClause(val pattern: MatchPattern, val body: Stmt.ExprStmt)
 
 abstract class MatchPattern : AST() {
     data class Literal(val value: Expr.Literal) : MatchPattern()

@@ -1,0 +1,36 @@
+{
+  "name": "klox",
+  "displayName": "klox",
+  "description": "",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "repository": "git@github.com:mitchelljustin/klox.git",
+  "contributes": {
+    "languages": [
+      {
+        "id": "klox",
+        "aliases": [
+          "klox",
+          "klox"
+        ],
+        "extensions": [
+          ".klox",
+          ".lox"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "klox",
+        "scopeName": "source.klox",
+        "path": "./syntaxes/klox.tmLanguage.json"
+      }
+    ]
+  }
+}
