@@ -111,7 +111,21 @@ class Interpreter {
             if (value == eval(pattern.value)) arrayListOf() else null
         is MatchPattern.List ->
             matchesListPattern(value, pattern)
+        is MatchPattern.Dict ->
+            matchesDictPattern(value, pattern)
         else -> throw RuntimeError("unimplemented pattern type: ${pattern::class.simpleName}", pattern)
+    }
+
+    private fun matchesDictPattern(value: Value, pattern: MatchPattern.Dict): MatchResult? {
+        if (!value.isDict) return null
+        val dict = value.intoDict()
+        val captures = MatchResult()
+        for ((key, valuePattern) in pattern.entries) {
+            val item = dict[key] ?: return null
+            val capture = matchesPattern(item, valuePattern) ?: return null
+            captures.addAll(capture)
+        }
+        return captures
     }
 
     private fun matchesListPattern(value: Value, pattern: MatchPattern.List): MatchResult? {
@@ -121,10 +135,10 @@ class Interpreter {
         return try {
             list
                 .zip(pattern.items)
-                .fold(MatchResult()) { bindings, (itemValue, itemPattern) ->
-                    when (val binding = matchesPattern(itemValue, itemPattern)) {
+                .fold(MatchResult()) { captures, (itemValue, itemPattern) ->
+                    when (val capture = matchesPattern(itemValue, itemPattern)) {
                         null -> throw Break()
-                        else -> (bindings + binding) as MatchResult
+                        else -> (captures + capture) as MatchResult
                     }
                 }
         } catch (_: Break) {

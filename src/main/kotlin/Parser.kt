@@ -83,10 +83,16 @@ class Parser(private val tokens: List<Token>) {
     }
 
     private fun pattern(): MatchPattern = when {
-        matchAndConsume(LEFT_SQUARE) ->
-            MatchPattern.List(
-                commaList(::pattern, RIGHT_SQUARE, "list pattern")
-            )
+        matchAndConsume(LEFT_SQUARE) -> when {
+            isDictStart() ->
+                MatchPattern.Dict(
+                    commaList(::dictPatternEntry, RIGHT_SQUARE, "dict pattern")
+                )
+            else ->
+                MatchPattern.List(
+                    commaList(::pattern, RIGHT_SQUARE, "list pattern")
+                )
+        }
         check(IDENTIFIER) ->
             MatchPattern.Anything(ident())
         matchAndConsume(ELSE) ->
@@ -95,6 +101,17 @@ class Parser(private val tokens: List<Token>) {
             MatchPattern.Literal(literal())
         else ->
             throw parseError("illegal match pattern")
+    }
+
+    private fun dictPatternEntry(): Pair<String, MatchPattern> {
+        val key = ident(" for dict pattern key")
+        consume(COLON, " after dict pattern key")
+        val value =
+            if (check(COMMA) || check(RIGHT_SQUARE))
+                MatchPattern.Anything(key)
+            else
+                pattern()
+        return Pair(key.name, value)
     }
 
     private fun forInStmt(): Stmt.ForIn {
@@ -301,7 +318,7 @@ class Parser(private val tokens: List<Token>) {
     }
 
     private fun collectionLiteral(): Expr.Literal = when {
-        check(IDENTIFIER) && check(COLON, offset = 1) -> {
+        isDictStart() -> {
             val entryList = commaList(::dictEntry, RIGHT_SQUARE, "dict")
             Expr.Literal(hashMapOf(*entryList.toTypedArray()))
         }
@@ -310,6 +327,8 @@ class Parser(private val tokens: List<Token>) {
         else ->
             Expr.Literal(commaList(::expression, RIGHT_SQUARE, "array"))
     }
+
+    private fun isDictStart() = check(IDENTIFIER) && check(COLON, offset = 1)
 
     private fun dictEntry(): Pair<String, Expr> {
         val key = ident(" for dict key")
