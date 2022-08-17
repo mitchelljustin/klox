@@ -1,7 +1,7 @@
 enum class TokenType(val match: String? = null) {
     LEFT_PAREN("("), RIGHT_PAREN(")"), LEFT_CURLY("{"), RIGHT_CURLY("}"),
     LEFT_SQUARE("["), RIGHT_SQUARE("]"),
-    COMMA(","), DOT("."), SEMICOLON(";"),
+    COMMA(","), DOT("."), SEMICOLON(";"), COLON(":"),
     MINUS("-"), PLUS("+"), SLASH("/"), STAR("*"),
     MINUS_EQUAL("-="), PLUS_EQUAL("+="), SLASH_EQUAL("/="), STAR_EQUAL("*="),
 

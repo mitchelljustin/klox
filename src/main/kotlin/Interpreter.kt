@@ -186,7 +186,7 @@ class Interpreter {
                     }
                 }
             }
-            else -> throw RuntimeError("unsupported loop iterator: ${iteratee.type}")
+            else -> throw RuntimeError("illegal loop iterator: ${iteratee.type}")
         }
         contextPop()
         return Value.Nil
@@ -214,45 +214,49 @@ class Interpreter {
     private fun evalVariable(expr: Expr.Variable) = ctx.resolve(expr.target.name)
 
     private fun evalLiteral(expr: Expr.Literal) = Value(when (val value = expr.value) {
-        is List<*> -> value.map { eval(it as Expr) }
+        is ArrayList<*> -> value.map { eval(it as Expr) }
+        is HashMap<*, *> -> value.mapValues { (_, v) -> eval(v as Expr) }
         else -> value
     })
 
     private fun evalAccess(expr: Expr.Access): Value {
         val target = eval(expr.target)
         val member = expr.member.name
-        return Value(
-            when (member) {
-                "string" -> Callable.Method(target, global.resolve("string").into())
-                "type" -> Callable.Method(target, global.resolve("type").into())
-                "add" -> {
-                    if (!target.isList) throw TypeError(Value.Type.List, target.type)
-                    Callable.Method(
-                        target,
-                        Callable.BuiltIn("add") { listValue, elem ->
-                            listValue.map<ArrayList<Value>> {
-                                it.add(elem); it
-                            }
-                        }
-                    )
-                }
-                else -> throw RuntimeError("no member '$member' on $target")
+        return when {
+            target.isDictionary -> {
+                val dict = target.intoDictionary()
+                dict[member] ?: Value.Nil
             }
-        )
+            else -> throw RuntimeError("illegal access: '$member' on ${target.type}")
+        }
     }
 
-    private fun evalAssignment(expr: Expr.Assignment): Value {
-        val target = expr.target.name
-        var newValue = eval(expr.value)
-        val operator = expr.operator
-        val undefinedVar = { throw RuntimeError("undefined variable '$target'", expr) }
-        if (operator.type != EQUAL) {
-            val oldValue = ctx.resolveSafe(target) ?: undefinedVar()
-            newValue = Value(applyBinaryOp(operator, oldValue.into(), newValue.into()))
-        }
-        if (!ctx.assign(target, newValue)) undefinedVar()
+    private fun evalAssignment(expr: Expr.Assignment): Value = when (expr.target) {
+        is Expr.Variable -> {
+            val target = expr.target.target.name
+            var newValue = eval(expr.value)
+            val operator = expr.operator
+            val undefinedVar = { throw RuntimeError("undefined variable '$target'", expr) }
+            if (operator.type != EQUAL) {
+                val oldValue = ctx.resolveSafe(target) ?: undefinedVar()
+                newValue = Value(applyBinaryOp(operator, oldValue.into(), newValue.into()))
+            }
+            if (!ctx.assign(target, newValue)) undefinedVar()
 
-        return newValue
+            newValue
+        }
+        is Expr.Access -> {
+            val target = eval(expr.target.target)
+            if (!target.isDictionary)
+                throw RuntimeError("can only assign to Dictionary member, not ${target.type}")
+            val member = expr.target.member.name
+            val newValue = eval(expr.value)
+            if (expr.operator.type != EQUAL)
+                throw RuntimeError("only equal(=) assignment supported for Dictionary access")
+            target.intoDictionary()[member] = newValue
+            newValue
+        }
+        else -> throw RuntimeError("illegal assignment target: ${expr.target::class.simpleName}")
     }
 
     private fun evalCall(expr: Expr.Call): Value {
@@ -284,7 +288,7 @@ class Interpreter {
         is Callable.Method ->
             doCall(callee.function, listOf(callee.self) + arguments)
         else ->
-            throw RuntimeError("unsupported Callable $callee : ${callee::class.simpleName}")
+            throw RuntimeError("illegal Callable $callee : ${callee::class.simpleName}")
     }
 
     private fun evalUnaryExpr(expr: Expr.Unary): Value {

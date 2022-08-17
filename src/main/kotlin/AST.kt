@@ -50,7 +50,7 @@ abstract class Expr : AST() {
         override fun toString() = "Variable(${target.name})"
     }
 
-    data class Assignment(val target: Ident, val operator: Token, val value: Expr) : Expr()
+    data class Assignment(val target: Expr, val operator: Token, val value: Expr) : Expr()
 
     data class Call(val target: Expr, val arguments: List<Expr>) : Expr()
 
@@ -59,7 +59,15 @@ abstract class Expr : AST() {
     class Literal(val value: Any?) : Expr() {
         override fun toString() = when (value) {
             is String -> "\"$value\""
-            is Double, is Atom, is List<*>, true, false, null -> value.toString()
+
+            is Double,
+            is Atom,
+            is List<*>,
+            is HashMap<*, *>,
+            true, false, null,
+            ->
+                value.toString()
+
             else -> "?"
         }
     }

@@ -16,6 +16,7 @@ open class Value(val inner: Any?, val type: Type) {
         Callable,
         Atom,
         List,
+        Dictionary,
         Nil,
     }
 
@@ -31,7 +32,8 @@ open class Value(val inner: Any?, val type: Type) {
     constructor(inner: Any?) : this(
         when (inner) {
             is Value -> inner.inner
-            is ArrayList<*> -> inner.map { Value(it) }
+            is ArrayList<*> -> inner.map(::Value)
+            is HashMap<*, *> -> inner.entries.associate { (k, v) -> (k as String) to Value(v) }
             else -> inner
         },
         when (inner) {
@@ -41,6 +43,7 @@ open class Value(val inner: Any?, val type: Type) {
             is BareAtom -> Type.Atom
             is Function<*>, is Callable -> Type.Callable
             is ArrayList<*> -> Type.List
+            is HashMap<*, *> -> Type.Dictionary
             null, is Unit -> Type.Nil
             is Value -> inner.type
             else -> throw Exception("cannot convert to Lox value: $inner")
@@ -50,6 +53,7 @@ open class Value(val inner: Any?, val type: Type) {
     val isNil get() = type == Type.Nil
     val isString get() = type == Type.String
     val isList get() = type == Type.List
+    val isDictionary get() = type == Type.Dictionary
     val isDouble get() = type == Type.Double
     val isBoolean get() = type == Type.Boolean
     val isAtom get() = type == Type.Atom
@@ -61,24 +65,15 @@ open class Value(val inner: Any?, val type: Type) {
             else -> true
         }
     val isFalsy get() = !isTruthy
-    val typeAtom: Value
-        get() = Atom(
-            when (type) {
-                Type.String -> "String"
-                Type.Double -> "Double"
-                Type.Boolean -> "Boolean"
-                Type.Callable -> "Callable"
-                Type.Atom -> "Atom"
-                Type.List -> "List"
-                Type.Nil -> "Nil"
-            }
-        )
+    val typeAtom get() = Atom(type.toString())
 
     inline fun <reified T> map(f: (T) -> T): Value = Value(f(into()))
     inline fun <reified T> into(): T = when (inner) {
         is T -> inner
         else -> throw CastException(this, T::class.simpleName ?: "unknown")
     }
+
+    fun intoDictionary() = into<HashMap<String, Value>>()
 
     override operator fun equals(other: Any?) = when (other) {
         is Value -> when {
@@ -93,6 +88,13 @@ open class Value(val inner: Any?, val type: Type) {
         inner is Double && inner - inner.toInt() == 0.0 ->
             inner.toInt().toString()
         isString -> "\"$inner\""
+        isDictionary && inner is HashMap<*, *> -> {
+            var kvs = inner
+                .map { (k, v) -> "$k: $v" }
+                .joinToString(", ")
+            if (kvs.isEmpty()) kvs = ":"
+            "[$kvs]"
+        }
         else -> inner.toString()
     }
 

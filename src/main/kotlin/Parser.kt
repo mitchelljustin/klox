@@ -166,17 +166,17 @@ class Parser(private val tokens: List<Token>) {
         assignment()
 
     private fun assignment(): Expr {
-        val expr = or()
+        val target = or()
 
         if (match(TokenType.Assignment)) {
             val operator = prevToken
             val value = assignment()
-            if (expr !is Expr.Variable)
-                throw error("expected variable on lhs of '$operator'")
-            return Expr.Assignment(expr.target, operator, value)
+            if (target !is Expr.Variable && target !is Expr.Access)
+                throw error("only variable and member access are allowed as LHS for assignment")
+            return Expr.Assignment(target, operator, value)
         }
 
-        return expr
+        return target
     }
 
     private fun parseLeftAssoc(nextRule: () -> Expr, vararg tokenTypes: TokenType): Expr {
@@ -241,27 +241,51 @@ class Parser(private val tokens: List<Token>) {
         return expr
     }
 
-    private fun <T> commaList(itemFunc: () -> T, kind: String, ender: TokenType): ArrayList<T> {
+    private fun <T> commaList(itemFunc: () -> T, itemName: String, ender: TokenType): ArrayList<T> {
         val list = ArrayList<T>()
         while (!match(ender)) {
             val item = itemFunc()
             list.add(item)
             if (!check(ender))
-                consume(COMMA, "expected ',' after $kind")
+                consume(COMMA, "expected ',' after $itemName")
         }
         if (list.isNotEmpty())
             match(COMMA) // optional trailing comma
         return list
     }
 
-    private fun literal() = when {
-        match(FALSE) -> Expr.Literal(false)
-        match(TRUE) -> Expr.Literal(true)
-        match(NIL) -> Expr.Literal(null)
-        match(NUMBER, STRING) -> Expr.Literal(prevToken.literal)
-        match(ATOM) -> Expr.Literal(Atom(prevToken.literal as String))
-        match(LEFT_SQUARE) -> Expr.Literal(commaList(::expression, "array item", RIGHT_SQUARE))
+    private fun literal(): Expr.Literal = when {
+        match(FALSE) ->
+            Expr.Literal(false)
+        match(TRUE) ->
+            Expr.Literal(true)
+        match(NIL) ->
+            Expr.Literal(null)
+        match(NUMBER, STRING) ->
+            Expr.Literal(prevToken.literal)
+        match(ATOM) ->
+            Expr.Literal(Atom(prevToken.literal as String))
+        match(LEFT_SQUARE) ->
+            collectionLiteral()
         else -> throw error("expected literal")
+    }
+
+    private fun collectionLiteral(): Expr.Literal = when {
+        check(IDENTIFIER) && check(COLON, offset = 1) -> {
+            val entryList = commaList(::dictionaryEntry, "dictionary entry", RIGHT_SQUARE)
+            Expr.Literal(hashMapOf(*entryList.toTypedArray()))
+        }
+        match(COLON) && match(RIGHT_SQUARE) ->
+            Expr.Literal(hashMapOf<String, Expr>())
+        else ->
+            Expr.Literal(commaList(::expression, "array item", RIGHT_SQUARE))
+    }
+
+    private fun dictionaryEntry(): Pair<String, Expr> {
+        val key = ident(" for dictionary key")
+        consume(COLON, "expected '${COLON.match}' after dictionary key")
+        val value = expression()
+        return Pair(key.name, value)
     }
 
     private fun primary() = when {
