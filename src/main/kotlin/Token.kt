@@ -27,11 +27,6 @@ enum class TokenType(val match: String? = null) {
 
     EOF;
 
-    companion object {
-        val Assignment = setOf(EQUAL, MINUS_EQUAL, PLUS_EQUAL, SLASH_EQUAL, STAR_EQUAL)
-        val Literals = setOf(STRING, NUMBER, ATOM, NIL, TRUE, FALSE, LEFT_SQUARE)
-    }
-
     val isKeyword: Boolean get() = match != null && match.length > 1 && match.startsWith(":")
     val first: Char? get() = match?.first()
     val second: Char? get() = match?.get(1)

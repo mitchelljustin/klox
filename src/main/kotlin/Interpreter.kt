@@ -86,14 +86,12 @@ class Interpreter {
     private fun evalMatch(expr: Expr.Match): Value {
         val value = eval(expr.target)
         for (clause in expr.clauses) {
-            val bindings = matchesPattern(value, clause.pattern)
-            if (bindings != null) {
-                contextPush()
-                bindings.forEach { (name, value) -> ctx.define(name, value) }
-                val result = execExprStmt(clause.body)
-                contextPop()
-                return result
-            }
+            val captures = matchesPattern(value, clause.pattern) ?: continue
+            contextPush()
+            captures.forEach { (name, value) -> ctx.define(name, value) }
+            val result = execExprStmt(clause.body)
+            contextPop()
+            return result
         }
         // TODO: exhausted match?
         return Value.Nil
@@ -113,7 +111,8 @@ class Interpreter {
             matchesListPattern(value, pattern)
         is MatchPattern.Dict ->
             matchesDictPattern(value, pattern)
-        else -> throw RuntimeError("unimplemented pattern type: ${pattern::class.simpleName}", pattern)
+        else ->
+            throw RuntimeError("illegal pattern type: ${pattern::class.simpleName}", pattern)
     }
 
     private fun matchesDictPattern(value: Value, pattern: MatchPattern.Dict): MatchResult? {
@@ -122,8 +121,8 @@ class Interpreter {
         val captures = MatchResult()
         for ((key, valuePattern) in pattern.entries) {
             val item = dict[key] ?: return null
-            val capture = matchesPattern(item, valuePattern) ?: return null
-            captures.addAll(capture)
+            val subCaptures = matchesPattern(item, valuePattern) ?: return null
+            captures.addAll(subCaptures)
         }
         return captures
     }
@@ -136,9 +135,9 @@ class Interpreter {
             list
                 .zip(pattern.items)
                 .fold(MatchResult()) { captures, (itemValue, itemPattern) ->
-                    when (val capture = matchesPattern(itemValue, itemPattern)) {
+                    when (val subCaptures = matchesPattern(itemValue, itemPattern)) {
                         null -> throw Break()
-                        else -> (captures + capture) as MatchResult
+                        else -> (captures + subCaptures) as MatchResult
                     }
                 }
         } catch (_: Break) {
@@ -262,9 +261,9 @@ class Interpreter {
         }
     }
 
-    private fun evalBlock(stmt: Expr.Block): Value {
+    private fun evalBlock(block: Expr.Block): Value {
         contextPush()
-        val result = execSequence(stmt.stmts)
+        val result = execSequence(block.stmts)
         contextPop()
         return result
     }

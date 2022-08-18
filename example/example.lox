@@ -4,4 +4,7 @@ fun printHiThrice() {
     }
 }
 printHiThrice()
-let f = 
+let dict = [a: 1, b: 2]
+for (k, v) in dict {
+    print("")
+}

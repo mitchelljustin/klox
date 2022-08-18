@@ -80,9 +80,9 @@ data class Ident(val name: String) : AST() {
     override fun toString() = "Ident($name)"
 }
 
-data class MatchClause(val pattern: MatchPattern, val body: Stmt.ExprStmt)
+data class MatchClause(val pattern: MatchPattern, val body: Stmt.ExprStmt) : AST()
 
-data class FunctionDef(val name: Ident?, val parameters: List<Ident>, val body: Expr.Block)
+data class FunctionDef(val name: Ident?, val parameters: List<Ident>, val body: Expr.Block) : AST()
 
 abstract class MatchPattern : AST() {
     data class Literal(val value: Expr.Literal) : MatchPattern()
